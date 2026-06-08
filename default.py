@@ -1,6 +1,6 @@
 """
 Koryo TV - Kodi Plugin
-Streams video content from vod.koryo.tv (MediaCMS-based)
+Streams video content from vod.koryo.tv
 """
 
 import sys
