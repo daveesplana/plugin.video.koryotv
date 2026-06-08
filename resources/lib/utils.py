@@ -12,6 +12,9 @@ _MEDIA = os.path.join(ADDON.getAddonInfo('path'), 'resources', 'media')
 def addon_icon():
     return os.path.join(_MEDIA, 'icon.png')
 
+def addon2_icon():
+    return os.path.join(_MEDIA, 'icon2.png')
+
 def play_icon():
     return os.path.join(_MEDIA, 'play.png')
 

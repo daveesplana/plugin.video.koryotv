@@ -1,8 +1,3 @@
-"""
-Koryo TV - Kodi Plugin
-Streams video content from vod.koryo.tv
-"""
-
 import re
 import socket
 import threading
@@ -174,7 +169,7 @@ def main_menu():
         },
         {
             'label':    '[COLOR gold]Support / Donate to Koryo TV[/COLOR]',
-            'icon':     utils.addon_icon(),
+            'icon':     utils.addon2_icon(),
             'params':   {'action': 'donate'},
             'isFolder': True,
         },
