@@ -18,9 +18,6 @@ BASE_URL = sys.argv[0]
 HANDLE = int(sys.argv[1])
 PARAMS = dict(parse_qsl(sys.argv[2][1:]))
 
-REPORT_PREFIX = 'Korean Central Television 8 PM Report'
-REPORT_QUERY  = REPORT_PREFIX
-
 LIVE_PROXY_SERVER = None
 LIVE_PROXY_LOCK = threading.Lock()
 
@@ -353,6 +350,8 @@ def report(page=1):
     dialog.close()
 
     if data and 'results' in data:
+        REPORT_PREFIX = 'Korean Central Television 8 PM Report'
+        REPORT_QUERY  = REPORT_PREFIX
         data['results'] = [i for i in data['results'] if i.get('title', '').startswith(REPORT_PREFIX)]
 
     prev_params = None
