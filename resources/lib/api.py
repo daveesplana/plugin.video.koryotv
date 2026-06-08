@@ -1,30 +1,78 @@
 """
-API helpers for vod.koryo.tv (MediaCMS)
+API helpers for vod.koryo.tv (MediaCMS) and edge-mcu.koryo.tv (Live)
 """
 
 import json
+import os
+import binascii
+import ssl
+from http.cookies import SimpleCookie
+
 try:
     from urllib.request import urlopen, Request
     from urllib.parse import urlencode
     from urllib.error import URLError, HTTPError
+    import http.client as http_client
 except ImportError:
     from urllib2 import urlopen, Request, URLError, HTTPError
     from urllib import urlencode
+    import httplib as http_client
 
-BASE = 'https://vod.koryo.tv'
+BASE     = 'https://vod.koryo.tv'
 API_BASE = BASE + '/api/v1'
-PAGE_SIZE = 20
+EDGE_HOST = 'edge-mcu.koryo.tv'
+EDGE      = 'https://' + EDGE_HOST
+
+LIVE_CHANNELS = [
+    {
+        'id':   'kctv',
+        'name': 'Korean Central Television (KCTV)',
+    },
+]
+
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
 
 HEADERS = {
-    'User-Agent': 'Kodi/Koryo-TV-Addon/1.0',
-    'Accept': 'application/json',
+    'User-Agent': UA,
+    'Accept':     'application/json',
+    'Origin':     'https://koryo.tv',
+    'Referer':    'https://koryo.tv/',
 }
 
 
-def _get(url):
-    """Perform a GET request and return parsed JSON."""
-    req = Request(url, headers=HEADERS)
+def _random_hex_token():
+    """24-char random hex token matching the browser player's A(12) helper."""
+    return binascii.hexlify(os.urandom(12)).decode('ascii')
+
+
+def _ssl_context():
     try:
+        ctx = ssl.create_default_context()
+        return ctx
+    except Exception:
+        return ssl._create_unverified_context()
+
+
+def _cookies_from_set_cookie(header):
+    if not header:
+        return ''
+    cookie = SimpleCookie()
+    cookie.load(header)
+    return '; '.join(['{}={}'.format(m.key, m.value) for m in cookie.values()])
+
+
+def _get(url, extra_headers=None):
+    headers = dict(HEADERS)
+    if extra_headers:
+        headers.update(extra_headers)
+    req = Request(url, headers=headers)
+    try:
+        response = urlopen(req, timeout=15, context=_ssl_context())
+        raw = response.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
+        return json.loads(raw)
+    except TypeError:
         response = urlopen(req, timeout=15)
         raw = response.read()
         if isinstance(raw, bytes):
@@ -37,51 +85,119 @@ def _get(url):
 
 
 def get_media_list(page=1, ordering='-add_date'):
-    """
-    Fetch paginated media list.
-    ordering options: -add_date, -views, -likes, add_date, title
-    """
-    params = {
-        'page': int(page),
-        'ordering': ordering,
-    }
+    params = {'page': int(page), 'ordering': ordering}
     url = '{}/media?{}'.format(API_BASE, urlencode(params))
     return _get(url)
 
 
 def search_media(query, page=1):
-    """
-    Search for media using the dedicated /api/v1/search endpoint.
-    Returns the same paginated structure as get_media_list.
-    """
-    params = {
-        'q': query,
-        'page': int(page),
-    }
+    params = {'q': query, 'page': int(page)}
     url = '{}/search?{}'.format(API_BASE, urlencode(params))
     return _get(url)
 
 
 def get_media_detail(token):
-    """Fetch full detail for a single media item by friendly_token."""
     url = '{}/media/{}'.format(API_BASE, token)
     return _get(url)
 
 
-def resolve_stream_url(media):
-    """
-    Pick the best available stream URL from a media detail dict.
-    Priority:
-      1. Original file (0-original h264)
-      2. Highest available encoding resolution
-      3. original_media_url field
-    """
-    base = BASE
+def get_live_stream_url(channel_id):
+    """Obtain a tokenized HLS playlist URL using a single persistent connection.
 
-    # Try encodings_info first
+    The edge server (edge-mcu.koryo.tv) identifies anonymous sessions by the
+    source IP address *on the same TCP keep-alive connection*.  Confirmed from
+    HAR: the server's Keep-Alive max counter decrements from 97 → 96 between
+    the /session/anon call and the /kctv/live/... call — same socket, same
+    connection.
+
+    Using two separate urllib connections (different sockets) means the server
+    never associates the session with the live request → HTTP 401.
+
+    Fix: use http.client.HTTPSConnection directly so both requests share one
+    persistent connection, exactly as a browser does.
+
+    Flow:
+      1. GET /session/anon?quality=1080p    → {success:true, expiresIn:900}
+      2. GET /kctv/live/{random_hex}.m3u8  → 302 Location: /hls/pl/{uuid}.m3u8
+      3. Return https://edge-mcu.koryo.tv/hls/pl/{uuid}.m3u8
+    """
+    ctx = _ssl_context()
+    conn = http_client.HTTPSConnection(EDGE_HOST, timeout=15, context=ctx)
+
+    channel_referer = 'https://koryo.tv/channel/{}'.format(channel_id)
+    live_headers = {
+        'User-Agent':      UA,
+        'Accept':          '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Origin':          'https://koryo.tv',
+        'Referer':         channel_referer,
+        'Cache-Control':   'no-cache',
+        'Pragma':          'no-cache',
+        'TE':              'trailers',
+        'Sec-Fetch-Dest':  'empty',
+        'Sec-Fetch-Mode':  'cors',
+        'Sec-Fetch-Site':  'same-origin',
+        'Connection':      'keep-alive',
+    }
+
+    try:
+        # Step 1: establish anonymous session — KEEP connection alive
+        conn.request('GET', '/session/anon?quality=1080p', headers=live_headers)
+        resp = conn.getresponse()
+        body = resp.read()  # must consume body before next request
+        if resp.status != 200:
+            raise Exception(
+                'Session endpoint returned HTTP {} — body: {}'.format(
+                    resp.status, body[:200].decode('utf-8', errors='replace')))
+
+        cookie_str = _cookies_from_set_cookie(resp.getheader('Set-Cookie', ''))
+
+        # Step 2: request live playlist on THE SAME connection
+        random_token = _random_hex_token()
+        live_path = '/{}/live/{}.m3u8'.format(channel_id, random_token)
+
+        live_headers2 = dict(live_headers)
+        live_headers2['Accept'] = '*/*'
+        if cookie_str:
+            live_headers2['Cookie'] = cookie_str
+
+        conn.request('GET', live_path, headers=live_headers2)
+        resp2 = conn.getresponse()
+        resp2.read()  # consume body
+
+        if resp2.status in (301, 302, 303, 307, 308):
+            location = resp2.getheader('Location', '')
+        elif resp2.status == 200:
+            # Some edge nodes return 200 with the playlist directly — use final URL
+            location = live_path
+        else:
+            raise Exception(
+                'Live endpoint returned HTTP {}'.format(resp2.status))
+
+        if not location:
+            raise Exception('No Location header in redirect response')
+
+        # Resolve relative path to full URL
+        if location.startswith('/'):
+            final_url = EDGE + location
+        elif location.startswith('http'):
+            final_url = location
+        else:
+            final_url = EDGE + '/' + location
+
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return final_url, cookie_str
+
+
+def resolve_stream_url(media):
+    base = BASE
     encodings = media.get('encodings_info', {})
 
-    # Prefer original
     original = encodings.get('0-original', {})
     if original:
         for codec, info in original.items():
@@ -91,7 +207,6 @@ def resolve_stream_url(media):
                     url = base + url
                 return url
 
-    # Try resolutions from highest to lowest
     for res in ['1080', '720', '480', '360', '240', '144']:
         res_data = encodings.get(res, {})
         for codec, info in res_data.items():
@@ -101,7 +216,6 @@ def resolve_stream_url(media):
                     url = base + url
                 return url
 
-    # Fallback to original_media_url
     fallback = media.get('original_media_url', '')
     if fallback:
         if fallback.startswith('/'):

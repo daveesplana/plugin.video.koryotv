@@ -13,7 +13,7 @@
     <summary lang="en_GB">Koryo TV</summary>
     <description lang="en_GB">Browse and stream videos from Koryo TV.</description>
     <platform>all</platform>
-    <license>Unlicense</license>
+    <license>Unlicensed</license>
     <assets>
       <icon>resources/media/icon.png</icon>
       <fanart>resources/media/fanart.png</fanart>
