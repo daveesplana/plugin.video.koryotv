@@ -347,7 +347,7 @@ def listing(page=1, ordering='-add_date'):
 def report(page=1):
     page = int(page)
     dialog = xbmcgui.DialogProgress()
-    dialog.create(ADDON_NAME, 'Loading 8 PM News Reports...')
+    dialog.create(ADDON_NAME, 'Loading...')
     try:
         data = api.search_media(query=REPORT_QUERY, page=page)
     except Exception as e:
