@@ -149,13 +149,13 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
 def main_menu():
     entries = [
         {
-            'label':    'Latest Videos',
+            'label':    'Video On Demand',
             'icon':     utils.play_icon(),
             'params':   {'action': 'listing', 'page': 1, 'ordering': '-add_date'},
             'isFolder': True,
         },
         {
-            'label':    '[COLOR red]Live TV[/COLOR]',
+            'label':    'Live TV',
             'icon':     utils.play_icon(),
             'params':   {'action': 'live'},
             'isFolder': True,

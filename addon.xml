@@ -18,5 +18,9 @@
       <icon>resources/media/icon.png</icon>
       <fanart>resources/media/fanart.png</fanart>
     </assets>
+    <website>https://koryo.tv</website>
+    <news>
+    - 1.0.2
+    </news>
   </extension>
 </addon>
