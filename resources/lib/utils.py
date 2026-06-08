@@ -15,6 +15,15 @@ def addon_icon():
 def play_icon():
     return os.path.join(_MEDIA, 'play.png')
 
+def live_icon():
+    return os.path.join(_MEDIA, 'live.png')
+
+def kctv_icon():
+    return os.path.join(_MEDIA, 'kctv.png')
+
+def report_icon():
+    return os.path.join(_MEDIA, 'bodo.png')
+
 def search_icon():
     return os.path.join(_MEDIA, 'search.png')
 

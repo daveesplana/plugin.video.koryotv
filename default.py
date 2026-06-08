@@ -156,13 +156,13 @@ def main_menu():
         },
         {
             'label':    'Live TV',
-            'icon':     utils.play_icon(),
+            'icon':     utils.live_icon(),
             'params':   {'action': 'live'},
             'isFolder': True,
         },
         {
             'label':    'Report',
-            'icon':     utils.play_icon(),
+            'icon':     utils.report_icon(),
             'params':   {'action': 'report', 'page': 1},
             'isFolder': True,
         },
@@ -195,7 +195,7 @@ def live():
     for ch in api.LIVE_CHANNELS:
         li = xbmcgui.ListItem(label=ch['name'])
         set_video_info(li, title=ch['name'], plot='Live stream of {}'.format(ch['name']))
-        li.setArt({'icon': utils.play_icon(), 'thumb': utils.play_icon()})
+        li.setArt({'icon': utils.kctv_icon(), 'thumb': utils.kctv_icon()})
         li.setProperty('IsPlayable', 'true')
         # NOTE: No static token is passed – a fresh random token is generated
         # at play time in play_live() via api.get_live_stream_url().
