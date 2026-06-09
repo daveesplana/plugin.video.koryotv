@@ -102,25 +102,6 @@ def get_media_detail(token):
 
 
 def get_live_stream_url(channel_id):
-    """Obtain a tokenized HLS playlist URL using a single persistent connection.
-
-    The edge server (edge-mcu.koryo.tv) identifies anonymous sessions by the
-    source IP address *on the same TCP keep-alive connection*.  Confirmed from
-    HAR: the server's Keep-Alive max counter decrements from 97 → 96 between
-    the /session/anon call and the /kctv/live/... call — same socket, same
-    connection.
-
-    Using two separate urllib connections (different sockets) means the server
-    never associates the session with the live request → HTTP 401.
-
-    Fix: use http.client.HTTPSConnection directly so both requests share one
-    persistent connection, exactly as a browser does.
-
-    Flow:
-      1. GET /session/anon?quality=1080p    → {success:true, expiresIn:900}
-      2. GET /kctv/live/{random_hex}.m3u8  → 302 Location: /hls/pl/{uuid}.m3u8
-      3. Return https://edge-mcu.koryo.tv/hls/pl/{uuid}.m3u8
-    """
     ctx = _ssl_context()
     conn = http_client.HTTPSConnection(EDGE_HOST, timeout=15, context=ctx)
 
