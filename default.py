@@ -21,6 +21,9 @@ PARAMS = dict(parse_qsl(sys.argv[2][1:]))
 LIVE_PROXY_SERVER = None
 LIVE_PROXY_LOCK = threading.Lock()
 
+REPORT_PREFIX = 'Korean Central Television 8 PM Report'
+REPORT_QUERY  = REPORT_PREFIX
+
 class LiveProxyRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
@@ -141,7 +144,7 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
 def main_menu():
     entries = [
         {
-            'label':    'Video On Demand',
+            'label':    'VOD',
             'icon':     utils.play_icon(),
             'params':   {'action': 'listing', 'page': 1, 'ordering': '-add_date'},
             'isFolder': True,
@@ -350,8 +353,6 @@ def report(page=1):
     dialog.close()
 
     if data and 'results' in data:
-        REPORT_PREFIX = 'Korean Central Television 8 PM Report'
-        REPORT_QUERY  = REPORT_PREFIX
         data['results'] = [i for i in data['results'] if i.get('title', '').startswith(REPORT_PREFIX)]
 
     prev_params = None
