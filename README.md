@@ -1,6 +1,8 @@
 # Koryo TV plugin for Kodi
 Watch and stream North Korean TV on Kodi.
 
+<img width="720" height="480" alt="image" src="https://github.com/user-attachments/assets/91c2dab7-74ff-4cac-9e6e-a1a10289bd34" />
+
 ## Installation
 1. Download the latest ZIP file from the Releases section.
 2. Open Kodi and go to Settings (top-left gear icon).
