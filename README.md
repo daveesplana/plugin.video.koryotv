@@ -8,4 +8,3 @@ Watch and stream North Korean TV on Kodi.
 4. Enable Unknown Sources.
 5. Go back to Kodi Add-ons and choose "Install from zip file".
 6. Find the downloaded ZIP file and select it to install the add-on.
-   
