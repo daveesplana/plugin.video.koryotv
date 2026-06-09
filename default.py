@@ -168,7 +168,7 @@ def main_menu():
             'isFolder': True,
         },
         {
-            'label':    '[COLOR gold]Support / Donate to Koryo TV[/COLOR]',
+            'label':    '[COLOR gold]Support to Koryo TV[/COLOR]',
             'icon':     utils.addon2_icon(),
             'params':   {'action': 'donate'},
             'isFolder': True,
