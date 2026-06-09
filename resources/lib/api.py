@@ -1,7 +1,3 @@
-"""
-API helpers for vod.koryo.tv (MediaCMS) and edge-mcu.koryo.tv (Live)
-"""
-
 import json
 import os
 import binascii
@@ -41,7 +37,6 @@ HEADERS = {
 
 
 def _random_hex_token():
-    """24-char random hex token matching the browser player's A(12) helper."""
     return binascii.hexlify(os.urandom(12)).decode('ascii')
 
 
@@ -122,10 +117,9 @@ def get_live_stream_url(channel_id):
     }
 
     try:
-        # Step 1: establish anonymous session — KEEP connection alive
         conn.request('GET', '/session/anon?quality=1080p', headers=live_headers)
         resp = conn.getresponse()
-        body = resp.read()  # must consume body before next request
+        body = resp.read() 
         if resp.status != 200:
             raise Exception(
                 'Session endpoint returned HTTP {} — body: {}'.format(
@@ -133,7 +127,6 @@ def get_live_stream_url(channel_id):
 
         cookie_str = _cookies_from_set_cookie(resp.getheader('Set-Cookie', ''))
 
-        # Step 2: request live playlist on THE SAME connection
         random_token = _random_hex_token()
         live_path = '/{}/live/{}.m3u8'.format(channel_id, random_token)
 
@@ -144,12 +137,11 @@ def get_live_stream_url(channel_id):
 
         conn.request('GET', live_path, headers=live_headers2)
         resp2 = conn.getresponse()
-        resp2.read()  # consume body
+        resp2.read()
 
         if resp2.status in (301, 302, 303, 307, 308):
             location = resp2.getheader('Location', '')
         elif resp2.status == 200:
-            # Some edge nodes return 200 with the playlist directly — use final URL
             location = live_path
         else:
             raise Exception(
@@ -158,7 +150,6 @@ def get_live_stream_url(channel_id):
         if not location:
             raise Exception('No Location header in redirect response')
 
-        # Resolve relative path to full URL
         if location.startswith('/'):
             final_url = EDGE + location
         elif location.startswith('http'):

@@ -1,7 +1,3 @@
-"""
-Utility helpers for Koryo TV addon
-"""
-
 import os
 import xbmcaddon
 

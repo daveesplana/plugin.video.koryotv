@@ -186,14 +186,11 @@ def main_menu():
 
 
 def live():
-    """List live TV channels."""
     for ch in api.LIVE_CHANNELS:
         li = xbmcgui.ListItem(label=ch['name'])
         set_video_info(li, title=ch['name'], plot='Live stream of {}'.format(ch['name']))
         li.setArt({'icon': utils.kctv_icon(), 'thumb': utils.kctv_icon()})
         li.setProperty('IsPlayable', 'true')
-        # NOTE: No static token is passed – a fresh random token is generated
-        # at play time in play_live() via api.get_live_stream_url().
         url = build_url({'action': 'play_live', 'channel_id': ch['id'], 'name': ch['name']})
         xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=False)
 
@@ -202,15 +199,6 @@ def live():
 
 
 def play_live(channel_id, name):
-    """Fetch a fresh session + resolved m3u8 URL then play.
-
-    The live stream flow (verified from HAR):
-      1. GET /session/anon?quality=1080p          → server acknowledges session
-      2. GET /kctv/live/{random_hex_24}.m3u8      → HTTP 302
-         Location: /hls/pl/{uuid}.m3u8            → tokenized playlist
-      3. Playlist contains AES-128 encrypted TS segments; key at /hls/pl/{uuid}/key
-         (the key endpoint is gated by the active session)
-    """
     xbmc.log('[KoryoTV] play_live called: channel_id={}'.format(channel_id), xbmc.LOGINFO)
     dialog = xbmcgui.DialogProgress()
     dialog.create(ADDON_NAME, 'Connecting to live stream...')
