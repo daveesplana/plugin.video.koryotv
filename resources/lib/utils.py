@@ -20,6 +20,9 @@ def live_icon():
 def kctv_icon():
     return os.path.join(_MEDIA, 'kctv.png')
 
+def vok_icon():
+    return os.path.join(_MEDIA, 'vok.png')
+
 def report_icon():
     return os.path.join(_MEDIA, 'bodo.png')
 

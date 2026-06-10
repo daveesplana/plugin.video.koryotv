@@ -24,6 +24,16 @@ LIVE_CHANNELS = [
         'id':   'kctv',
         'name': 'Korean Central Television (KCTV)',
     },
+    {
+        'id':   'kcbs',
+        'name': 'Korean Central Broadcasting Station',
+        'group': 'Live Broadcasts',
+    },
+    {
+        'id':   'vok',
+        'name': 'Voice of Korea',
+        'group': 'Live Broadcasts',
+    },
 ]
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
@@ -117,7 +127,13 @@ def get_live_stream_url(channel_id):
     }
 
     try:
-        conn.request('GET', '/session/anon?quality=1080p', headers=live_headers)
+        # Choose session quality: radio channels use a radio-specific quality token
+        if channel_id in ('kcbs', 'vok'):
+            quality = 'radio-{}'.format(channel_id)
+        else:
+            quality = '1080p'
+
+        conn.request('GET', '/session/anon?quality={}'.format(quality), headers=live_headers)
         resp = conn.getresponse()
         body = resp.read() 
         if resp.status != 200:
@@ -128,12 +144,17 @@ def get_live_stream_url(channel_id):
         cookie_str = _cookies_from_set_cookie(resp.getheader('Set-Cookie', ''))
 
         random_token = _random_hex_token()
-        live_path = '/{}/live/{}.m3u8'.format(channel_id, random_token)
 
         live_headers2 = dict(live_headers)
         live_headers2['Accept'] = '*/*'
         if cookie_str:
             live_headers2['Cookie'] = cookie_str
+
+        # Radio channels use a different path pattern (observed in HAR): /radio/<id>/b/<token>.m3u8
+        if quality.startswith('radio-'):
+            live_path = '/radio/{}/b/{}.m3u8'.format(channel_id, random_token)
+        else:
+            live_path = '/{}/live/{}.m3u8'.format(channel_id, random_token)
 
         conn.request('GET', live_path, headers=live_headers2)
         resp2 = conn.getresponse()
