@@ -13,7 +13,7 @@
     <summary>Koryo TV</summary>
     <description>Browse and stream videos from Koryo TV.</description>
     <platform>all</platform>
-    <license>PolyForm Noncommercial License 1.0.0</license>
+    <license>PolyForm-Noncommercial-1.0.0</license>
     <assets>
       <icon>resources/media/icon.png</icon>
       <fanart>resources/media/fanart.png</fanart>
