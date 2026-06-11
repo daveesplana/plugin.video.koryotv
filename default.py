@@ -21,30 +21,13 @@ PARAMS = dict(parse_qsl(sys.argv[2][1:]))
 REPORT_PREFIX = 'Korean Central Television 8 PM Report'
 REPORT_QUERY  = REPORT_PREFIX
 
-# ---------------------------------------------------------------------------
-# Live proxy — runs in a completely separate OS-level thread group so that
-# Kodi's Python invoker can exit cleanly after setResolvedUrl() without
-# killing the proxy mid-stream.
-#
-# Key design decisions that fix the "waiting on thread" deadlock:
-#   1. The proxy server is started in a daemon thread BUT the thread is stored
-#      in a module-level variable so CPython keeps the thread object alive even
-#      after the invoker exits — the GIL is held by the main interpreter, not
-#      by the invoker subprocess.
-#   2. We use port 0 (OS picks a free port) and store it on the server object.
-#   3. The server is reused across plays (same port) so subsequent play_live
-#      calls simply update remote_url / live_headers and return immediately.
-# ---------------------------------------------------------------------------
-
 _PROXY_LOCK   = threading.Lock()
-_PROXY_SERVER = None   # module-level — survives invoker teardown
-
+_PROXY_SERVER = None
 
 class _ProxyHandler(BaseHTTPRequestHandler):
-    """Minimal HTTP/1.1 proxy that rewrites HLS playlist URIs."""
 
     def log_message(self, fmt, *args):
-        pass  # suppress access log spam
+        pass
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -57,7 +40,6 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
-    # ------------------------------------------------------------------
     def _fetch(self, url):
         req = Request(url, headers=self.server.live_headers)
         return urlopen(req, timeout=20, context=api._ssl_context())
@@ -117,7 +99,6 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 
 
 def _ensure_proxy(remote_url, stream_headers):
-    """Start (or reuse) the proxy server. Returns the server instance."""
     global _PROXY_SERVER
     with _PROXY_LOCK:
         if _PROXY_SERVER is not None:
@@ -133,8 +114,6 @@ def _ensure_proxy(remote_url, stream_headers):
         server.remote_url   = remote_url
         server.live_headers = stream_headers
 
-        # Use setDaemon(False) so the thread isn't killed when the invoker exits;
-        # the server itself has daemon_threads=True for *request* threads.
         t = threading.Thread(target=server.serve_forever)
         t.daemon = True
         t.start()
@@ -145,9 +124,18 @@ def _ensure_proxy(remote_url, stream_headers):
         return server
 
 
-# ---------------------------------------------------------------------------
-# Kodi helpers
-# ---------------------------------------------------------------------------
+def _activate_player_if_currently_playing(stream_url):
+    player = xbmc.Player()
+    if player.isPlayingVideo() or player.isPlayingAudio():
+        try:
+            current = player.getPlayingFile()
+            if current == stream_url or stream_url.endswith(current) or current.endswith(stream_url):
+                xbmc.executebuiltin('ActivateWindow(10025)')
+                return True
+        except Exception:
+            pass
+    return False
+
 
 def build_url(params):
     return '{0}?{1}'.format(BASE_URL, urlencode(params))
@@ -171,11 +159,6 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
             'mediatype': 'video',
             'date':      date,
         })
-
-
-# ---------------------------------------------------------------------------
-# Menu / listing
-# ---------------------------------------------------------------------------
 
 def main_menu():
     entries = [
@@ -242,6 +225,9 @@ def play_live(channel_id, name):
     port      = proxy.server_address[1]
     local_url = 'http://127.0.0.1:{}/live.m3u8'.format(port)
     xbmc.log('[KoryoTV] Proxy URL: {}'.format(local_url), xbmc.LOGINFO)
+
+    if _activate_player_if_currently_playing(local_url):
+        return
 
     li = xbmcgui.ListItem(label=name)
     li.setPath(local_url)
@@ -392,6 +378,9 @@ def play(token):
         xbmcgui.Dialog().ok(ADDON_NAME, 'Could not find a playable stream for this video.')
         return
 
+    if _activate_player_if_currently_playing(stream_url):
+        return
+
     title = media.get('title', 'Koryo TV')
     thumb = media.get('thumbnail_url', '')
     if thumb and thumb.startswith('/'):
@@ -402,11 +391,6 @@ def play(token):
     li.setArt({'thumb': thumb, 'poster': thumb})
     li.setProperty('IsPlayable', 'true')
     xbmcplugin.setResolvedUrl(HANDLE, True, listitem=li)
-
-
-# ---------------------------------------------------------------------------
-# Router
-# ---------------------------------------------------------------------------
 
 action = PARAMS.get('action', 'main')
 

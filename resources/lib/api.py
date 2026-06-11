@@ -66,6 +66,19 @@ def _cookies_from_set_cookie(header):
     return '; '.join(['{}={}'.format(m.key, m.value) for m in cookie.values()])
 
 
+def _parse_json(raw):
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8')
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        if not raw or not raw.strip():
+            raise Exception(
+                'VOD API returned no data. The service may be temporarily unavailable. Please try again later.')
+        raise Exception(
+            'VOD API returned invalid data. The service may be temporarily unavailable. Please try again later.')
+
+
 def _get(url, extra_headers=None):
     headers = dict(HEADERS)
     if extra_headers:
@@ -74,15 +87,11 @@ def _get(url, extra_headers=None):
     try:
         response = urlopen(req, timeout=15, context=_ssl_context())
         raw = response.read()
-        if isinstance(raw, bytes):
-            raw = raw.decode('utf-8')
-        return json.loads(raw)
+        return _parse_json(raw)
     except TypeError:
         response = urlopen(req, timeout=15)
         raw = response.read()
-        if isinstance(raw, bytes):
-            raw = raw.decode('utf-8')
-        return json.loads(raw)
+        return _parse_json(raw)
     except HTTPError as e:
         raise Exception('HTTP {}: {}'.format(e.code, url))
     except URLError as e:
@@ -127,7 +136,6 @@ def get_live_stream_url(channel_id):
     }
 
     try:
-        # Choose session quality: radio channels use a radio-specific quality token
         if channel_id in ('kcbs', 'vok'):
             quality = 'radio-{}'.format(channel_id)
         else:
@@ -150,7 +158,6 @@ def get_live_stream_url(channel_id):
         if cookie_str:
             live_headers2['Cookie'] = cookie_str
 
-        # Radio channels use a different path pattern (observed in HAR): /radio/<id>/b/<token>.m3u8
         if quality.startswith('radio-'):
             live_path = '/radio/{}/b/{}.m3u8'.format(channel_id, random_token)
         else:
