@@ -1,5 +1,5 @@
 
-<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/cd619431-07ed-424e-bdc9-c22e21b54a34" />
+<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/a69501ad-1dcf-4d3a-bbf9-902748195a6d" />
 
 ## Installation
 1. Download the latest ZIP file from the Releases section.
