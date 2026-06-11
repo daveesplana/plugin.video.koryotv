@@ -124,19 +124,6 @@ def _ensure_proxy(remote_url, stream_headers):
         return server
 
 
-def _activate_player_if_currently_playing(stream_url):
-    player = xbmc.Player()
-    if player.isPlayingVideo() or player.isPlayingAudio():
-        try:
-            current = player.getPlayingFile()
-            if current == stream_url or stream_url.endswith(current) or current.endswith(stream_url):
-                xbmc.executebuiltin('ActivateWindow(10025)')
-                return True
-        except Exception:
-            pass
-    return False
-
-
 def build_url(params):
     return '{0}?{1}'.format(BASE_URL, urlencode(params))
 
@@ -225,9 +212,6 @@ def play_live(channel_id, name):
     port      = proxy.server_address[1]
     local_url = 'http://127.0.0.1:{}/live.m3u8'.format(port)
     xbmc.log('[KoryoTV] Proxy URL: {}'.format(local_url), xbmc.LOGINFO)
-
-    if _activate_player_if_currently_playing(local_url):
-        return
 
     li = xbmcgui.ListItem(label=name)
     li.setPath(local_url)
@@ -376,9 +360,6 @@ def play(token):
     stream_url = api.resolve_stream_url(media)
     if not stream_url:
         xbmcgui.Dialog().ok(ADDON_NAME, 'Could not find a playable stream for this video.')
-        return
-
-    if _activate_player_if_currently_playing(stream_url):
         return
 
     title = media.get('title', 'Koryo TV')
