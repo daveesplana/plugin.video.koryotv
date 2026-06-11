@@ -1,5 +1,4 @@
 import re
-import socket
 import threading
 import sys
 import xbmc
@@ -12,22 +11,28 @@ from urllib.request import Request, urlopen
 
 from resources.lib import api, utils
 
-ADDON = xbmcaddon.Addon()
+ADDON      = xbmcaddon.Addon()
 ADDON_NAME = ADDON.getAddonInfo('name')
-BASE_URL = sys.argv[0]
-HANDLE = int(sys.argv[1])
-PARAMS = dict(parse_qsl(sys.argv[2][1:]))
+BASE_URL   = sys.argv[0]
+HANDLE     = int(sys.argv[1])
+PARAMS     = dict(parse_qsl(sys.argv[2][1:]))
 
 REPORT_PREFIX = 'Korean Central Television 8 PM Report'
 REPORT_QUERY  = REPORT_PREFIX
 
+# ---------------------------------------------------------------------------
+# Live proxy
+# ---------------------------------------------------------------------------
+
 _PROXY_LOCK   = threading.Lock()
-_PROXY_SERVER = None
+_PROXY_SERVER = None   # survives invoker teardown (module-level)
+_STREAM_CACHE = {}     # channel_id -> (stream_url, cookie_str)
+
 
 class _ProxyHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        pass
+        pass  # suppress access log spam
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -46,9 +51,9 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 
     def _serve_playlist(self):
         try:
-            resp   = self._fetch(self.server.remote_url)
-            raw    = resp.read().decode('utf-8', errors='replace')
-            base   = self.server.remote_url
+            resp = self._fetch(self.server.remote_url)
+            raw  = resp.read().decode('utf-8', errors='replace')
+            base = self.server.remote_url
 
             lines = []
             for line in raw.splitlines():
@@ -75,7 +80,8 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         except Exception as e:
-            xbmc.log('[KoryoTV] Proxy playlist error: {}'.format(e), xbmc.LOGERROR)
+            xbmc.log('[KoryoTV] Proxy playlist error: {} — clearing stream cache'.format(e), xbmc.LOGERROR)
+            _STREAM_CACHE.clear()   # force fresh token on next play
             self.send_error(502, str(e))
 
     def _serve_passthrough(self, qs):
@@ -99,11 +105,12 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 
 
 def _ensure_proxy(remote_url, stream_headers):
+    """Start proxy server once; subsequent calls just update remote_url/headers."""
     global _PROXY_SERVER
     with _PROXY_LOCK:
         if _PROXY_SERVER is not None:
-            _PROXY_SERVER.remote_url    = remote_url
-            _PROXY_SERVER.live_headers  = stream_headers
+            _PROXY_SERVER.remote_url   = remote_url
+            _PROXY_SERVER.live_headers = stream_headers
             return _PROXY_SERVER
 
         class _Server(ThreadingHTTPServer):
@@ -124,6 +131,10 @@ def _ensure_proxy(remote_url, stream_headers):
         return server
 
 
+# ---------------------------------------------------------------------------
+# Kodi helpers
+# ---------------------------------------------------------------------------
+
 def build_url(params):
     return '{0}?{1}'.format(BASE_URL, urlencode(params))
 
@@ -140,20 +151,47 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
             tag.setFirstAired(date)
     except AttributeError:
         li.setInfo('video', {
-            'title':     title,
-            'plot':      plot,
-            'duration':  duration,
-            'mediatype': 'video',
-            'date':      date,
+            'title':    title,
+            'plot':     plot,
+            'duration': duration,
+            'mediatype':'video',
+            'date':     date,
         })
+
+
+def _channel_icon(ch):
+    cid = ch.get('id', '')
+    if cid == 'kctv':  return utils.kctv_icon()
+    if cid == 'vok':   return utils.vok_icon()
+    return utils.live_icon()
+
+
+# ---------------------------------------------------------------------------
+# Menu
+# ---------------------------------------------------------------------------
 
 def main_menu():
     entries = [
-        {'label': 'Live Broadcasts',   'icon': utils.live_icon(),   'params': {'action': 'live'},                                   'isFolder': True},
-        {'label': 'Video Library',     'icon': utils.play_icon(),   'params': {'action': 'listing', 'page': 1, 'ordering': '-add_date'}, 'isFolder': True},
-        {'label': 'News',              'icon': utils.report_icon(), 'params': {'action': 'report', 'page': 1},                      'isFolder': True},
-        {'label': 'Search',            'icon': utils.search_icon(), 'params': {'action': 'search'},                                 'isFolder': True},
-        {'label': '[COLOR gold]Support Koryo TV[/COLOR]', 'icon': utils.addon2_icon(), 'params': {'action': 'donate'}, 'isFolder': True},
+        {'label': 'Live Broadcasts',
+         'icon':  utils.live_icon(),
+         'params': {'action': 'live'},
+         'isFolder': True},
+        {'label': 'Video Library',
+         'icon':  utils.play_icon(),
+         'params': {'action': 'listing', 'page': 1, 'ordering': '-add_date'},
+         'isFolder': True},
+        {'label': 'News',
+         'icon':  utils.report_icon(),
+         'params': {'action': 'report', 'page': 1},
+         'isFolder': True},
+        {'label': 'Search',
+         'icon':  utils.search_icon(),
+         'params': {'action': 'search'},
+         'isFolder': True},
+        {'label': '[COLOR gold]Support Koryo TV[/COLOR]',
+         'icon':  utils.addon2_icon(),
+         'params': {'action': 'donate'},
+         'isFolder': True},
     ]
     for e in entries:
         li = xbmcgui.ListItem(label=e['label'])
@@ -168,12 +206,7 @@ def live():
     for ch in api.LIVE_CHANNELS:
         li = xbmcgui.ListItem(label=ch['name'])
         set_video_info(li, title=ch['name'], plot='Live stream of {}'.format(ch['name']))
-        if ch['id'] == 'kctv':
-            icon = utils.kctv_icon()
-        elif ch['id'] == 'vok':
-            icon = utils.vok_icon()
-        else:
-            icon = utils.live_icon()
+        icon = _channel_icon(ch)
         li.setArt({'icon': icon, 'thumb': icon})
         li.setProperty('IsPlayable', 'true')
         url = build_url({'action': 'play_live', 'channel_id': ch['id'], 'name': ch['name']})
@@ -184,26 +217,35 @@ def live():
 
 def play_live(channel_id, name):
     xbmc.log('[KoryoTV] play_live: channel={}'.format(channel_id), xbmc.LOGINFO)
-    dialog = xbmcgui.DialogProgress()
-    dialog.create(ADDON_NAME, 'Connecting to live stream...')
-    try:
-        stream_url, cookie_str = api.get_live_stream_url(channel_id)
-        xbmc.log('[KoryoTV] Resolved stream URL: {}'.format(stream_url), xbmc.LOGINFO)
-    except Exception as e:
+
+    # Reuse cached URL so replaying doesn't fetch a brand-new session/token.
+    # Cache is cleared automatically if the playlist fetch fails (see proxy above).
+    cached = _STREAM_CACHE.get(channel_id)
+    if cached:
+        stream_url, cookie_str = cached
+        xbmc.log('[KoryoTV] Reusing cached stream: {}'.format(stream_url), xbmc.LOGINFO)
+    else:
+        dialog = xbmcgui.DialogProgress()
+        dialog.create(ADDON_NAME, 'Connecting to live stream...')
+        try:
+            stream_url, cookie_str = api.get_live_stream_url(channel_id)
+            _STREAM_CACHE[channel_id] = (stream_url, cookie_str)
+            xbmc.log('[KoryoTV] Resolved stream: {}'.format(stream_url), xbmc.LOGINFO)
+        except Exception as e:
+            dialog.close()
+            xbmc.log('[KoryoTV] Live stream error: {}'.format(e), xbmc.LOGERROR)
+            xbmcgui.Dialog().ok(ADDON_NAME, 'Live stream error:\n{}'.format(str(e)))
+            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+            return
         dialog.close()
-        xbmc.log('[KoryoTV] Live stream error: {}'.format(e), xbmc.LOGERROR)
-        xbmcgui.Dialog().ok(ADDON_NAME, 'Live stream error:\n{}'.format(str(e)))
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-    dialog.close()
 
     stream_headers = {
-        'User-Agent':      api.UA,
-        'Accept':          '*/*',
-        'Origin':          'https://koryo.tv',
-        'Referer':         'https://koryo.tv/channel/{}'.format(channel_id),
-        'Cache-Control':   'no-cache',
-        'Connection':      'keep-alive',
+        'User-Agent':    api.UA,
+        'Accept':        '*/*',
+        'Origin':        'https://koryo.tv',
+        'Referer':       'https://koryo.tv/channel/{}'.format(channel_id),
+        'Cache-Control': 'no-cache',
+        'Connection':    'keep-alive',
     }
     if cookie_str:
         stream_headers['Cookie'] = cookie_str
@@ -230,6 +272,10 @@ def donate():
     )
     xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
 
+
+# ---------------------------------------------------------------------------
+# VOD helpers
+# ---------------------------------------------------------------------------
 
 def _render_results(data, next_params, prev_params=None):
     if not data or 'results' not in data:
@@ -258,18 +304,21 @@ def _render_results(data, next_params, prev_params=None):
         set_video_info(li, title=title, plot=plot, duration=duration, date=add_date)
         li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': thumb})
         li.setProperty('IsPlayable', 'true')
-        xbmcplugin.addDirectoryItem(HANDLE, build_url({'action': 'play', 'token': token}), li, isFolder=False)
+        xbmcplugin.addDirectoryItem(
+            HANDLE, build_url({'action': 'play', 'token': token}), li, isFolder=False)
 
     cur_page = int(next_params.get('page', 2)) - 1
 
     if prev_params is not None:
         prev_page = int(prev_params.get('page', 1))
-        li = xbmcgui.ListItem(label='[COLOR yellow]Previous Page ({}/{})[/COLOR]'.format(prev_page, total_pages))
+        li = xbmcgui.ListItem(
+            label='[COLOR yellow]Previous Page ({}/{})[/COLOR]'.format(prev_page, total_pages))
         li.setArt({'icon': utils.play_icon(), 'thumb': utils.play_icon()})
         xbmcplugin.addDirectoryItem(HANDLE, build_url(prev_params), li, isFolder=True)
 
     if has_next:
-        li = xbmcgui.ListItem(label='[COLOR yellow]Next Page ({}/{})[/COLOR]'.format(cur_page + 1, total_pages))
+        li = xbmcgui.ListItem(
+            label='[COLOR yellow]Next Page ({}/{})[/COLOR]'.format(cur_page + 1, total_pages))
         li.setArt({'icon': utils.play_icon(), 'thumb': utils.play_icon()})
         xbmcplugin.addDirectoryItem(HANDLE, build_url(next_params), li, isFolder=True)
 
@@ -290,7 +339,8 @@ def listing(page=1, ordering='-add_date'):
         return
     dialog.close()
     prev_params = {'action': 'listing', 'page': page - 1, 'ordering': ordering} if page > 1 else None
-    _render_results(data, {'action': 'listing', 'page': page + 1, 'ordering': ordering}, prev_params=prev_params)
+    _render_results(data, {'action': 'listing', 'page': page + 1, 'ordering': ordering},
+                    prev_params=prev_params)
 
 
 def report(page=1):
@@ -306,7 +356,8 @@ def report(page=1):
         return
     dialog.close()
     if data and 'results' in data:
-        data['results'] = [i for i in data['results'] if i.get('title', '').startswith(REPORT_PREFIX)]
+        data['results'] = [i for i in data['results']
+                           if i.get('title', '').startswith(REPORT_PREFIX)]
     prev_params = {'action': 'report', 'page': page - 1} if page > 1 else None
     _render_results(data, {'action': 'report', 'page': page + 1}, prev_params=prev_params)
 
@@ -337,9 +388,11 @@ def _do_search(query, page=1):
         return
     dialog.close()
     count = data.get('count', 0) if data else 0
-    xbmcplugin.setPluginCategory(HANDLE, 'Search: "{}" - {} result{}'.format(query, count, 's' if count != 1 else ''))
+    xbmcplugin.setPluginCategory(
+        HANDLE, 'Search: "{}" - {} result{}'.format(query, count, 's' if count != 1 else ''))
     prev_params = {'action': 'search_results', 'query': query, 'page': page - 1} if page > 1 else None
-    _render_results(data, {'action': 'search_results', 'query': query, 'page': page + 1}, prev_params=prev_params)
+    _render_results(data, {'action': 'search_results', 'query': query, 'page': page + 1},
+                    prev_params=prev_params)
 
 
 def search_results(query, page=1):
@@ -368,10 +421,16 @@ def play(token):
         thumb = 'https://vod.koryo.tv' + thumb
 
     li = xbmcgui.ListItem(label=title, path=stream_url)
-    set_video_info(li, title=title, plot=media.get('description', ''), duration=media.get('duration', 0))
+    set_video_info(li, title=title, plot=media.get('description', ''),
+                   duration=media.get('duration', 0))
     li.setArt({'thumb': thumb, 'poster': thumb})
     li.setProperty('IsPlayable', 'true')
     xbmcplugin.setResolvedUrl(HANDLE, True, listitem=li)
+
+
+# ---------------------------------------------------------------------------
+# Router
+# ---------------------------------------------------------------------------
 
 action = PARAMS.get('action', 'main')
 
