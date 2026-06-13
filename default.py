@@ -293,7 +293,7 @@ def _render_results(data, next_params, prev_params=None):
         title       = item.get('title', 'Untitled')
         thumb       = item.get('thumbnail_url', '')
         if thumb and thumb.startswith('/'):
-            thumb = 'https://vod.koryo.tv' + thumb
+            thumb = 'https://vod.koryofront.org' + thumb
         duration    = item.get('duration', 0)
         views       = item.get('views', 0)
         add_date    = item.get('add_date', '')[:10]
@@ -418,7 +418,7 @@ def play(token):
     title = media.get('title', 'Koryo TV')
     thumb = media.get('thumbnail_url', '')
     if thumb and thumb.startswith('/'):
-        thumb = 'https://vod.koryo.tv' + thumb
+        thumb = 'https://vod.koryofront.org' + thumb
 
     li = xbmcgui.ListItem(label=title, path=stream_url)
     set_video_info(li, title=title, plot=media.get('description', ''),
