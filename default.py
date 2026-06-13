@@ -8,6 +8,7 @@ import xbmcaddon
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlencode, parse_qsl, parse_qs, quote, unquote, urljoin, urlparse
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 from resources.lib import api, utils
 
@@ -26,7 +27,11 @@ REPORT_QUERY  = REPORT_PREFIX
 
 _PROXY_LOCK   = threading.Lock()
 _PROXY_SERVER = None   # survives invoker teardown (module-level)
-_STREAM_CACHE = {}     # channel_id -> (stream_url, cookie_str)
+_STREAM_CACHE = {}     # channel_id -> (stream_url, cookie_str, edge_host, playlist_id)
+
+# How often (seconds) to refresh the session before it expires.
+# Server says expiresIn=30, so we refresh every 25 seconds to stay safe.
+_SESSION_REFRESH_INTERVAL = 25
 
 
 class _ProxyHandler(BaseHTTPRequestHandler):
@@ -50,39 +55,69 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         return urlopen(req, timeout=20, context=api._ssl_context())
 
     def _serve_playlist(self):
-        try:
-            resp = self._fetch(self.server.remote_url)
-            raw  = resp.read().decode('utf-8', errors='replace')
-            base = self.server.remote_url
+        # Try fetching playlist; on 404 attempt one refresh using the channel_id
+        tried_refresh = False
+        while True:
+            try:
+                resp = self._fetch(self.server.remote_url)
+                raw  = resp.read().decode('utf-8', errors='replace')
+                base = self.server.remote_url
 
-            lines = []
-            for line in raw.splitlines():
-                stripped = line.strip()
-                if stripped.startswith('#EXT-X-KEY'):
-                    m = re.search(r'URI="([^"]+)"', stripped)
-                    if m:
-                        abs_key = urljoin(base, m.group(1))
-                        line = stripped.replace(
-                            m.group(1),
-                            '/key?u=' + quote(abs_key, safe='')
-                        )
-                elif stripped and not stripped.startswith('#'):
-                    abs_seg = urljoin(base, stripped)
-                    line = '/seg?u=' + quote(abs_seg, safe='')
-                lines.append(line)
+                lines = []
+                for line in raw.splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith('#EXT-X-KEY'):
+                        m = re.search(r'URI="([^"]+)"', stripped)
+                        if m:
+                            abs_key = urljoin(base, m.group(1))
+                            line = stripped.replace(
+                                m.group(1),
+                                '/key?u=' + quote(abs_key, safe='')
+                            )
+                    elif stripped and not stripped.startswith('#'):
+                        abs_seg = urljoin(base, stripped)
+                        line = '/seg?u=' + quote(abs_seg, safe='')
+                    lines.append(line)
 
-            body = '\r\n'.join(lines) + '\r\n'
-            data = body.encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
-            self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'no-cache')
-            self.end_headers()
-            self.wfile.write(data)
-        except Exception as e:
-            xbmc.log('[KoryoTV] Proxy playlist error: {} — clearing stream cache'.format(e), xbmc.LOGERROR)
-            _STREAM_CACHE.clear()   # force fresh token on next play
-            self.send_error(502, str(e))
+                body = '\r\n'.join(lines) + '\r\n'
+                data = body.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            except HTTPError as he:
+                # If playlist not found, try to refresh a single time using channel_id
+                if he.code == 404 and not tried_refresh and getattr(self.server, 'channel_id', None):
+                    xbmc.log('[KoryoTV] Playlist 404 from {} — refreshing stream'.format(self.server.remote_url), xbmc.LOGWARNING)
+                    tried_refresh = True
+                    try:
+                        new_url, new_cookie, new_host, new_playlist_id = api.get_live_stream_url(self.server.channel_id)
+                        self.server.remote_url   = new_url
+                        self.server.edge_host    = new_host
+                        self.server.playlist_id  = new_playlist_id
+                        if new_cookie:
+                            self.server.live_headers['Cookie'] = new_cookie
+                        # Reset session refresh timer
+                        self.server.last_refresh = time.time()
+                        _STREAM_CACHE[self.server.channel_id] = (new_url, new_cookie, new_host, new_playlist_id)
+                        continue
+                    except Exception as e2:
+                        xbmc.log('[KoryoTV] Playlist refresh failed: {}'.format(e2), xbmc.LOGERROR)
+                        _STREAM_CACHE.clear()
+                        self.send_error(502, str(e2))
+                        return
+                xbmc.log('[KoryoTV] Proxy playlist error: {} — clearing stream cache'.format(he), xbmc.LOGERROR)
+                _STREAM_CACHE.clear()
+                self.send_error(502, str(he))
+                return
+            except Exception as e:
+                xbmc.log('[KoryoTV] Proxy playlist error: {} — clearing stream cache'.format(e), xbmc.LOGERROR)
+                _STREAM_CACHE.clear()
+                self.send_error(502, str(e))
+                return
 
     def _serve_passthrough(self, qs):
         url = qs.get('u', [None])[0]
@@ -104,13 +139,50 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self.send_error(502, str(e))
 
 
-def _ensure_proxy(remote_url, stream_headers):
-    """Start proxy server once; subsequent calls just update remote_url/headers."""
+# ---------------------------------------------------------------------------
+# Session refresh thread
+# CRITICAL FIX: The server expires sessions every 30 seconds.
+# We must call /session/refresh periodically to keep the playlist alive.
+# ---------------------------------------------------------------------------
+
+import time as _time_mod
+
+def _session_refresh_worker(server):
+    """Background thread: refresh session every _SESSION_REFRESH_INTERVAL seconds."""
+    while True:
+        _time_mod.sleep(_SESSION_REFRESH_INTERVAL)
+        try:
+            host        = getattr(server, 'edge_host', None)
+            playlist_id = getattr(server, 'playlist_id', None)
+            channel_id  = getattr(server, 'channel_id', None)
+            if not host or not playlist_id or not channel_id:
+                continue
+
+            old_cookie  = server.live_headers.get('Cookie', '')
+            new_cookie  = api.refresh_session(host, playlist_id, channel_id, old_cookie)
+            if new_cookie and new_cookie != old_cookie:
+                server.live_headers['Cookie'] = new_cookie
+                # Update cache too
+                if channel_id in _STREAM_CACHE:
+                    url, _, h, pid = _STREAM_CACHE[channel_id]
+                    _STREAM_CACHE[channel_id] = (url, new_cookie, h, pid)
+
+            xbmc.log('[KoryoTV] Session auto-refreshed for {} playlist={}'.format(
+                channel_id, playlist_id), xbmc.LOGDEBUG)
+        except Exception as e:
+            xbmc.log('[KoryoTV] Session refresh worker error: {}'.format(e), xbmc.LOGWARNING)
+
+
+def _ensure_proxy(remote_url, stream_headers, channel_id=None, edge_host=None, playlist_id=None):
+    """Start proxy server once; subsequent calls just update remote_url/headers/channel_id."""
     global _PROXY_SERVER
     with _PROXY_LOCK:
         if _PROXY_SERVER is not None:
             _PROXY_SERVER.remote_url   = remote_url
             _PROXY_SERVER.live_headers = stream_headers
+            _PROXY_SERVER.channel_id   = channel_id
+            _PROXY_SERVER.edge_host    = edge_host
+            _PROXY_SERVER.playlist_id  = playlist_id
             return _PROXY_SERVER
 
         class _Server(ThreadingHTTPServer):
@@ -120,10 +192,19 @@ def _ensure_proxy(remote_url, stream_headers):
         server = _Server(('127.0.0.1', 0), _ProxyHandler)
         server.remote_url   = remote_url
         server.live_headers = stream_headers
+        server.channel_id   = channel_id
+        server.edge_host    = edge_host
+        server.playlist_id  = playlist_id
 
+        # Proxy server thread
         t = threading.Thread(target=server.serve_forever)
         t.daemon = True
         t.start()
+
+        # Session refresh thread — keeps the 30-second session alive
+        r = threading.Thread(target=_session_refresh_worker, args=(server,))
+        r.daemon = True
+        r.start()
 
         _PROXY_SERVER = server
         xbmc.log('[KoryoTV] Proxy started on port {}'.format(
@@ -218,19 +299,25 @@ def live():
 def play_live(channel_id, name):
     xbmc.log('[KoryoTV] play_live: channel={}'.format(channel_id), xbmc.LOGINFO)
 
-    # Reuse cached URL so replaying doesn't fetch a brand-new session/token.
-    # Cache is cleared automatically if the playlist fetch fails (see proxy above).
+    # Reuse cached URL/session. Cache is cleared on playlist 404 (see proxy).
     cached = _STREAM_CACHE.get(channel_id)
     if cached:
-        stream_url, cookie_str = cached
-        xbmc.log('[KoryoTV] Reusing cached stream: {}'.format(stream_url), xbmc.LOGINFO)
+        stream_url, cookie_str, edge_host, playlist_id = cached
+        xbmc.log('[KoryoTV] Reusing cached stream: {} (host={}, playlist={})'.format(
+            stream_url, edge_host, playlist_id), xbmc.LOGINFO)
     else:
         dialog = xbmcgui.DialogProgress()
-        dialog.create(ADDON_NAME, 'Connecting to live stream...')
+        dialog.create(ADDON_NAME, 'Finding best server...')
+
+        def _progress(percent, message):
+            dialog.update(percent, message)
+
         try:
-            stream_url, cookie_str = api.get_live_stream_url(channel_id)
-            _STREAM_CACHE[channel_id] = (stream_url, cookie_str)
-            xbmc.log('[KoryoTV] Resolved stream: {}'.format(stream_url), xbmc.LOGINFO)
+            stream_url, cookie_str, edge_host, playlist_id = api.get_live_stream_url(
+                channel_id, progress_callback=_progress)
+            _STREAM_CACHE[channel_id] = (stream_url, cookie_str, edge_host, playlist_id)
+            xbmc.log('[KoryoTV] Resolved stream: {} host={} playlist={}'.format(
+                stream_url, edge_host, playlist_id), xbmc.LOGINFO)
         except Exception as e:
             dialog.close()
             xbmc.log('[KoryoTV] Live stream error: {}'.format(e), xbmc.LOGERROR)
@@ -250,7 +337,7 @@ def play_live(channel_id, name):
     if cookie_str:
         stream_headers['Cookie'] = cookie_str
 
-    proxy     = _ensure_proxy(stream_url, stream_headers)
+    proxy     = _ensure_proxy(stream_url, stream_headers, channel_id, edge_host, playlist_id)
     port      = proxy.server_address[1]
     local_url = 'http://127.0.0.1:{}/live.m3u8'.format(port)
     xbmc.log('[KoryoTV] Proxy URL: {}'.format(local_url), xbmc.LOGINFO)
@@ -400,15 +487,12 @@ def search_results(query, page=1):
 
 
 def play(token):
-    dialog = xbmcgui.DialogProgress()
-    dialog.create(ADDON_NAME, 'Loading video...')
     try:
         media = api.get_media_detail(token)
     except Exception as e:
-        dialog.close()
         xbmcgui.Dialog().notification(ADDON_NAME, 'Error: {}'.format(str(e)), xbmcgui.NOTIFICATION_ERROR)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
         return
-    dialog.close()
 
     stream_url = api.resolve_stream_url(media)
     if not stream_url:

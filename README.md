@@ -16,7 +16,7 @@ Kodi add-on for browsing and streaming video content from Koryo TV.
 6. Choose the downloaded ZIP file and install the add-on.
 
 ## Disclaimer
-This add-on is an unofficial Kodi plugin and is not endorsed by or affiliated with Koryo TV or any of its content providers.
+This add-on is an unofficial Kodi plugin and is not endorsed by or affiliated with Koryo Front or any of its content providers.
 
 - The add-on streams content from third-party sources.
 - Availability, quality, and legality of streams are not guaranteed.

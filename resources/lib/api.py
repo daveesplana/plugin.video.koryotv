@@ -2,6 +2,8 @@ import json
 import os
 import binascii
 import ssl
+import time
+import xbmc
 from http.cookies import SimpleCookie
 
 try:
@@ -14,10 +16,21 @@ except ImportError:
     from urllib import urlencode
     import httplib as http_client
 
-BASE     = 'https://vod.koryofront.org'
-API_BASE = BASE + '/api/v1'
-EDGE_HOST = 'edge-mcu.koryo.tv'
-EDGE      = 'https://' + EDGE_HOST
+BASE       = 'https://vod.koryofront.org'
+API_BASE   = BASE + '/api/v1'
+
+# Fixed: edge-mcr -> edge-mtr (correct hostname from HAR), koryo.tv is also a valid edge
+EDGE_HOSTS = [
+    'edge-mcu.koryo.tv',   # Macau (MCU)
+    'edge-mtr.koryo.tv',   # Canada (MTR)  -- was wrongly 'edge-mcr' in original
+    'koryo.tv',            # Main / Kosovo (PRS)
+    'mtr.koryo.tv',
+    'osk.koryo.tv',        # Japan (OSK)
+    'vvo.koryo.tv',        # Russia (VVO)
+    'jhb.koryo.tv',        # South Africa (JHB)
+]
+EDGE_HOST  = EDGE_HOSTS[0]
+EDGE       = 'https://' + EDGE_HOST
 
 LIVE_CHANNELS = [
     {
@@ -115,14 +128,102 @@ def get_media_detail(token):
     return _get(url)
 
 
-def get_live_stream_url(channel_id):
+def _build_edge_url(host, location):
+    if location.startswith('/'):
+        return 'https://' + host + location
+    elif location.startswith('http'):
+        return location
+    return 'https://' + host + '/' + location
+
+
+# ---------------------------------------------------------------------------
+# Speed test — mirrors what the real browser does
+# Download 8 MB from /speedtest/probe and measure throughput (MB/s)
+# Falls back to /health latency if the probe endpoint fails.
+# ---------------------------------------------------------------------------
+
+# Fixed: probe each host with a real download test (8 MB) rather than just a
+# /health ping.  The real site picks the server with the highest download
+# speed, not the lowest latency, which is what we replicate here.
+def _probe_host_speed(host, timeout=10.0):
+    """
+    Return download speed in MB/s for host, or None if unreachable.
+    Uses /speedtest/probe?bytes=8388608 (8 MB) — exactly what the browser does.
+    Falls back to a /health latency probe (returns a small positive value) so
+    that hosts that don't expose the speedtest endpoint still rank above dead ones.
+    """
     ctx = _ssl_context()
-    conn = http_client.HTTPSConnection(EDGE_HOST, timeout=15, context=ctx)
+    t = int(time.time() * 1000)
+    probe_path = '/speedtest/probe?bytes=8388608&t={}'.format(t)
+
+    # --- download probe ---
+    conn = None
+    try:
+        conn = http_client.HTTPSConnection(host, timeout=timeout, context=ctx)
+        headers = {
+            'User-Agent':    UA,
+            'Accept':        '*/*',
+            'Cache-Control': 'no-cache',
+            'Pragma':        'no-cache',
+            'Origin':        'https://koryo.tv',
+            'Referer':       'https://koryo.tv/',
+        }
+        start = time.time()
+        conn.request('GET', probe_path, headers=headers)
+        resp = conn.getresponse()
+        data = resp.read()
+        elapsed = time.time() - start
+        if resp.status == 200 and len(data) > 0 and elapsed > 0:
+            speed_mbps = len(data) / elapsed / (1024 * 1024)
+            xbmc.log('[KoryoTV] Speedtest {}: {:.2f} MB/s in {:.2f}s'.format(
+                host, speed_mbps, elapsed), xbmc.LOGDEBUG)
+            return speed_mbps
+    except Exception as e:
+        xbmc.log('[KoryoTV] Speedtest probe failed for {}: {}'.format(host, e), xbmc.LOGDEBUG)
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    # --- fallback: /health latency ---
+    conn = None
+    try:
+        conn = http_client.HTTPSConnection(host, timeout=5, context=ctx)
+        headers = {'User-Agent': UA, 'Accept': '*/*'}
+        start = time.time()
+        conn.request('GET', '/health', headers=headers)
+        resp = conn.getresponse()
+        resp.read()
+        elapsed = time.time() - start
+        if resp.status == 200 and elapsed > 0:
+            # Convert latency to a pseudo-speed so it sorts below real speedtest results
+            # (a 1s ping -> 0.001 pseudo-MB/s, keeping it near the bottom)
+            pseudo = 0.001 / elapsed
+            xbmc.log('[KoryoTV] Health probe {}: {:.3f}s (pseudo-speed {:.4f})'.format(
+                host, elapsed, pseudo), xbmc.LOGDEBUG)
+            return pseudo
+    except Exception as e:
+        xbmc.log('[KoryoTV] Health probe failed for {}: {}'.format(host, e), xbmc.LOGWARNING)
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return None
+
+
+def _get_live_stream_url_for_host(channel_id, host):
+    ctx = _ssl_context()
+    conn = http_client.HTTPSConnection(host, timeout=15, context=ctx)
 
     channel_referer = 'https://koryo.tv/channel/{}'.format(channel_id)
     live_headers = {
         'User-Agent':      UA,
-        'Accept':          '*/*',
+        'Accept':          'application/json',
         'Accept-Language': 'en-US,en;q=0.5',
         'Origin':          'https://koryo.tv',
         'Referer':         channel_referer,
@@ -143,14 +244,13 @@ def get_live_stream_url(channel_id):
 
         conn.request('GET', '/session/anon?quality={}'.format(quality), headers=live_headers)
         resp = conn.getresponse()
-        body = resp.read() 
+        body = resp.read()
         if resp.status != 200:
             raise Exception(
                 'Session endpoint returned HTTP {} — body: {}'.format(
                     resp.status, body[:200].decode('utf-8', errors='replace')))
 
         cookie_str = _cookies_from_set_cookie(resp.getheader('Set-Cookie', ''))
-
         random_token = _random_hex_token()
 
         live_headers2 = dict(live_headers)
@@ -172,18 +272,20 @@ def get_live_stream_url(channel_id):
         elif resp2.status == 200:
             location = live_path
         else:
-            raise Exception(
-                'Live endpoint returned HTTP {}'.format(resp2.status))
+            raise Exception('Live endpoint returned HTTP {}'.format(resp2.status))
 
         if not location:
             raise Exception('No Location header in redirect response')
 
-        if location.startswith('/'):
-            final_url = EDGE + location
-        elif location.startswith('http'):
-            final_url = location
-        else:
-            final_url = EDGE + '/' + location
+        final_url = _build_edge_url(host, location)
+
+        # Extract the playlist ID from the final URL so the proxy can refresh the session.
+        # URL pattern: /hls/1080p/pl/<playlist_id>.m3u8
+        playlist_id = None
+        import re as _re
+        m = _re.search(r'/pl/([0-9a-f]+)\.m3u8', final_url)
+        if m:
+            playlist_id = m.group(1)
 
     finally:
         try:
@@ -191,7 +293,129 @@ def get_live_stream_url(channel_id):
         except Exception:
             pass
 
-    return final_url, cookie_str
+    return final_url, cookie_str, playlist_id
+
+
+# ---------------------------------------------------------------------------
+# Session refresh — CRITICAL FIX
+# The server issues sessions that expire in ~30 seconds (expiresIn: 30).
+# The real browser calls /session/refresh?playlistId=<id> every ~25 seconds
+# to keep the playlist alive.  Without this the playlist 404s and playback stops.
+# ---------------------------------------------------------------------------
+
+def refresh_session(host, playlist_id, channel_id, cookie_str=''):
+    """
+    Call /session/refresh?playlistId=<playlist_id> on the given host.
+    Returns the new cookie string (or the original if unchanged).
+    Raises on failure.
+    """
+    ctx = _ssl_context()
+    path = '/session/refresh?playlistId={}'.format(playlist_id)
+    headers = {
+        'User-Agent':    UA,
+        'Accept':        'application/json',
+        'Origin':        'https://koryo.tv',
+        'Referer':       'https://koryo.tv/channel/{}'.format(channel_id),
+        'Cache-Control': 'no-cache',
+        'Pragma':        'no-cache',
+    }
+    if cookie_str:
+        headers['Cookie'] = cookie_str
+
+    conn = None
+    try:
+        conn = http_client.HTTPSConnection(host, timeout=10, context=ctx)
+        conn.request('GET', path, headers=headers)
+        resp = conn.getresponse()
+        body = resp.read()
+        if resp.status == 200:
+            new_cookie = _cookies_from_set_cookie(resp.getheader('Set-Cookie', ''))
+            if new_cookie:
+                cookie_str = new_cookie
+            xbmc.log('[KoryoTV] Session refreshed for playlist {}'.format(playlist_id), xbmc.LOGDEBUG)
+        else:
+            raise Exception('session/refresh HTTP {}: {}'.format(
+                resp.status, body[:200].decode('utf-8', errors='replace')))
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return cookie_str
+
+
+def get_live_stream_url(channel_id, progress_callback=None):
+    """
+    Resolve the best live stream URL for channel_id.
+
+    progress_callback(percent, message) is called throughout so the caller
+    can drive a Kodi DialogProgress.  percent is 0-100; message is a
+    human-readable string describing what is happening right now.
+    If progress_callback is None the function works silently.
+    """
+
+    def _cb(pct, msg):
+        if progress_callback:
+            progress_callback(pct, msg)
+
+    total_hosts = len(EDGE_HOSTS)
+    # Speed-test phase uses 0-70 % of the bar; connect phase uses 70-100 %.
+    speed_per_host = 70 // total_hosts if total_hosts else 10
+
+    results = []
+    for i, host in enumerate(EDGE_HOSTS):
+        base_pct = i * speed_per_host
+        short    = host.replace('.koryo.tv', '').replace('koryo.tv', 'koryo.tv')
+        _cb(base_pct, 'Testing {}...'.format(short))
+        try:
+            speed = _probe_host_speed(host, timeout=10.0)
+            if speed is not None:
+                results.append((speed, host))
+                _cb(base_pct + speed_per_host,
+                    '{}: {:.1f} MB/s'.format(short, speed))
+            else:
+                _cb(base_pct + speed_per_host,
+                    '{}: unreachable'.format(short))
+        except Exception:
+            _cb(base_pct + speed_per_host, '{}: failed'.format(short))
+
+    if results:
+        results.sort(key=lambda x: x[0], reverse=True)
+        order = [h for _, h in results] + [
+            h for h in EDGE_HOSTS if h not in [hh for _, hh in results]]
+        best_host  = order[0]
+        best_speed = next(s for s, h in results if h == best_host)
+        best_short = best_host.replace('.koryo.tv', '').replace('koryo.tv', 'koryo.tv')
+        _cb(72, 'Best server: {} ({:.1f} MB/s)'.format(best_short, best_speed))
+    else:
+        order = EDGE_HOSTS[:]
+        _cb(72, 'No speed data — trying default order')
+
+    xbmc.log('[KoryoTV] Edge host order by speed: {}'.format(order), xbmc.LOGINFO)
+
+    connect_hosts = order
+    connect_total = len(connect_hosts)
+    connect_range = 28  # percent allocated to connection attempts
+
+    errors = []
+    for idx, host in enumerate(connect_hosts):
+        pct   = 72 + (idx * connect_range // connect_total)
+        short = host.replace('.koryo.tv', '').replace('koryo.tv', 'koryo.tv')
+        _cb(pct, 'Connecting to {}...'.format(short))
+        xbmc.log('[KoryoTV] Trying host: {}'.format(host), xbmc.LOGDEBUG)
+        try:
+            final_url, cookie_str, playlist_id = _get_live_stream_url_for_host(channel_id, host)
+            xbmc.log('[KoryoTV] Chosen host {} -> {} (playlist={})'.format(
+                host, final_url, playlist_id), xbmc.LOGINFO)
+            _cb(100, 'Connected to {}!'.format(short))
+            return final_url, cookie_str, host, playlist_id
+        except Exception as e:
+            xbmc.log('[KoryoTV] Host {} failed: {}'.format(host, e), xbmc.LOGWARNING)
+            errors.append('{}: {}'.format(host, e))
+
+    raise Exception('All live servers failed: {}'.format('; '.join(errors)))
 
 
 def resolve_stream_url(media):
