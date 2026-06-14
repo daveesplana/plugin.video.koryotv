@@ -109,7 +109,6 @@ def _parse_json(raw):
         raise Exception(
             'VOD API returned invalid data. The service may be temporarily unavailable. Please try again later.')
 
-
 def _get(url, extra_headers=None):
     headers = dict(HEADERS)
     if extra_headers:
@@ -128,23 +127,19 @@ def _get(url, extra_headers=None):
     except URLError as e:
         raise Exception('Network error: {}'.format(str(e.reason)))
 
-
 def get_media_list(page=1, ordering='-add_date'):
     params = {'page': int(page), 'ordering': ordering}
     url = '{}/media?{}'.format(API_BASE, urlencode(params))
     return _get(url)
-
 
 def search_media(query, page=1):
     params = {'q': query, 'page': int(page)}
     url = '{}/search?{}'.format(API_BASE, urlencode(params))
     return _get(url)
 
-
 def get_media_detail(token):
     url = '{}/media/{}'.format(API_BASE, token)
     return _get(url)
-
 
 def _build_edge_url(host, location):
     if location.startswith('/'):
@@ -212,7 +207,6 @@ def _probe_host_speed(host, timeout=10.0):
             pass
 
     return None
-
 
 def _get_live_stream_url_for_host(channel_id, host):
     ctx = _ssl_context()
@@ -329,7 +323,6 @@ def refresh_session(host, playlist_id, channel_id, cookie_str=''):
 
     return cookie_str
 
-
 def probe_all_servers(progress_callback=None):
 
     results = []
@@ -420,14 +413,12 @@ def probe_all_servers(progress_callback=None):
 
     return results
 
-
 def get_live_stream_url(channel_id, progress_callback=None, forced_host=None):
 
     def _cb(pct, msg):
         if progress_callback:
             progress_callback(pct, msg)
 
-    # --- Forced / manual server ---
     if forced_host:
         label = SERVER_LABELS.get(forced_host, forced_host)
         _cb(50, 'Connecting to {}...'.format(label))
@@ -492,7 +483,6 @@ def get_live_stream_url(channel_id, progress_callback=None, forced_host=None):
             errors.append('{}: {}'.format(host, e))
 
     raise Exception('All live servers failed: {}'.format('; '.join(errors)))
-
 
 def resolve_stream_url(media):
     base = BASE
