@@ -19,4 +19,3 @@ msgctxt "100"
 msgid "Server"
 msgstr ""
 
-

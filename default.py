@@ -29,23 +29,17 @@ _STATUS_BADGE = {
     'offline': 'Offline',
 }
 
-# ---------------------------------------------------------------------------
-# Live proxy
-# ---------------------------------------------------------------------------
-
 _PROXY_LOCK   = threading.Lock()
-_PROXY_SERVER = None   # survives invoker teardown (module-level)
-_STREAM_CACHE = {}     # channel_id -> (stream_url, cookie_str, edge_host, playlist_id)
+_PROXY_SERVER = None
+_STREAM_CACHE = {}
 
-# How often (seconds) to refresh the session before it expires.
-# Server says expiresIn=30, so we refresh every 25 seconds to stay safe.
 _SESSION_REFRESH_INTERVAL = 25
 
 
 class _ProxyHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        pass  # suppress access log spam
+        pass
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -63,7 +57,6 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         return urlopen(req, timeout=20, context=api._ssl_context())
 
     def _serve_playlist(self):
-        # Try fetching playlist; on 404 attempt one refresh using the channel_id
         tried_refresh = False
         while True:
             try:
@@ -97,7 +90,6 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
                 return
             except HTTPError as he:
-                # If playlist not found, try to refresh a single time using channel_id
                 if he.code == 404 and not tried_refresh and getattr(self.server, 'channel_id', None):
                     xbmc.log('[KoryoTV] Playlist 404 from {} — refreshing stream'.format(self.server.remote_url), xbmc.LOGWARNING)
                     tried_refresh = True
@@ -146,17 +138,9 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             xbmc.log('[KoryoTV] Proxy passthrough error: {}'.format(e), xbmc.LOGERROR)
             self.send_error(502, str(e))
 
-
-# ---------------------------------------------------------------------------
-# Session refresh thread
-# CRITICAL FIX: The server expires sessions every 30 seconds.
-# We must call /session/refresh periodically to keep the playlist alive.
-# ---------------------------------------------------------------------------
-
 import time as _time_mod
 
 def _session_refresh_worker(server):
-    """Background thread: refresh session every _SESSION_REFRESH_INTERVAL seconds."""
     while True:
         _time_mod.sleep(_SESSION_REFRESH_INTERVAL)
         try:
@@ -182,7 +166,6 @@ def _session_refresh_worker(server):
 
 
 def _ensure_proxy(remote_url, stream_headers, channel_id=None, edge_host=None, playlist_id=None):
-    """Start proxy server once; subsequent calls just update remote_url/headers/channel_id."""
     global _PROXY_SERVER
     with _PROXY_LOCK:
         if _PROXY_SERVER is not None:
@@ -219,11 +202,6 @@ def _ensure_proxy(remote_url, stream_headers, channel_id=None, edge_host=None, p
             server.server_address[1]), xbmc.LOGINFO)
         return server
 
-
-# ---------------------------------------------------------------------------
-# Kodi helpers
-# ---------------------------------------------------------------------------
-
 def build_url(params):
     return '{0}?{1}'.format(BASE_URL, urlencode(params))
 
@@ -253,11 +231,6 @@ def _channel_icon(ch):
     if cid == 'kctv':  return utils.kctv_icon()
     if cid == 'vok':   return utils.vok_icon()
     return utils.live_icon()
-
-
-# ---------------------------------------------------------------------------
-# Menu
-# ---------------------------------------------------------------------------
 
 def main_menu():
     entries = [
@@ -307,16 +280,14 @@ def live():
 def play_live(channel_id, name):
     xbmc.log('[KoryoTV] play_live: channel={}'.format(channel_id), xbmc.LOGINFO)
 
-    # Reuse cached URL/session. Cache is cleared on playlist 404 (see proxy).
     cached = _STREAM_CACHE.get(channel_id)
     if cached:
         stream_url, cookie_str, edge_host, playlist_id = cached
         xbmc.log('[KoryoTV] Reusing cached stream: {} (host={}, playlist={})'.format(
             stream_url, edge_host, playlist_id), xbmc.LOGINFO)
     else:
-        # Check if the user has pinned a specific server in settings
         server_mode = int(ADDON.getSetting('server_mode') or '0')
-        forced_host = api.SETTINGS_SERVER_MAP.get(server_mode)  # None when mode == 0 (Auto)
+        forced_host = api.SETTINGS_SERVER_MAP.get(server_mode)
 
         dialog = xbmcgui.DialogProgress()
         if forced_host:
@@ -374,11 +345,6 @@ def donate():
         'To donate, visit:\n[COLOR cyan]https://koryo.tv/donate[/COLOR]'
     )
     xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-
-
-# ---------------------------------------------------------------------------
-# VOD helpers
-# ---------------------------------------------------------------------------
 
 def _render_results(data, next_params, prev_params=None):
     if not data or 'results' not in data:
@@ -538,8 +504,6 @@ def server_test():
     )
     dialog.close()
 
-    # Build display lines for the select dialog
-    # Index 0 will always be "Automatic"
     STATUS_ICON = {
         'fast':    '[COLOR lime]●[/COLOR]',
         'ok':      '[COLOR yellow]●[/COLOR]',
@@ -548,10 +512,8 @@ def server_test():
     }
 
     select_labels = ['[COLOR cyan]🔄 Automatic (speed test on connect)[/COLOR]']
-    # Map select index -> server_mode setting value (1-based, 0=auto)
-    index_to_mode = [0]  # index 0 = Automatic
+    index_to_mode = [0]
 
-    # SETTINGS_SERVER_MAP maps mode int -> host; build reverse for lookup
     host_to_mode = {v: k for k, v in api.SETTINGS_SERVER_MAP.items()}
 
     for r in results:
@@ -571,7 +533,6 @@ def server_test():
         select_labels.append(line)
         index_to_mode.append(host_to_mode.get(host, 0))
 
-    # Highlight the currently saved selection
     current_mode = int(ADDON.getSetting('server_mode') or '0')
     current_index = 0
     for i, mode in enumerate(index_to_mode):
@@ -599,11 +560,6 @@ def server_test():
         xbmcgui.Dialog().notification(ADDON_NAME, msg, xbmcgui.NOTIFICATION_INFO, 3000)
 
     xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-
-
-# ---------------------------------------------------------------------------
-# Router
-# ---------------------------------------------------------------------------
 
 action = PARAMS.get('action', 'main')
 
