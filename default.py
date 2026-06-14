@@ -21,7 +21,6 @@ PARAMS     = dict(parse_qsl(sys.argv[2][1:]))
 REPORT_PREFIX = 'Korean Central Television 8 PM Report'
 REPORT_QUERY  = REPORT_PREFIX
 
-# Status badge labels
 _STATUS_BADGE = {
     'fast':    'Fast',
     'ok':      'OK',
@@ -100,7 +99,6 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                         self.server.playlist_id  = new_playlist_id
                         if new_cookie:
                             self.server.live_headers['Cookie'] = new_cookie
-                        # Reset session refresh timer
                         self.server.last_refresh = time.time()
                         _STREAM_CACHE[self.server.channel_id] = (new_url, new_cookie, new_host, new_playlist_id)
                         continue
@@ -154,7 +152,6 @@ def _session_refresh_worker(server):
             new_cookie  = api.refresh_session(host, playlist_id, channel_id, old_cookie)
             if new_cookie and new_cookie != old_cookie:
                 server.live_headers['Cookie'] = new_cookie
-                # Update cache too
                 if channel_id in _STREAM_CACHE:
                     url, _, h, pid = _STREAM_CACHE[channel_id]
                     _STREAM_CACHE[channel_id] = (url, new_cookie, h, pid)
@@ -187,12 +184,10 @@ def _ensure_proxy(remote_url, stream_headers, channel_id=None, edge_host=None, p
         server.edge_host    = edge_host
         server.playlist_id  = playlist_id
 
-        # Proxy server thread
         t = threading.Thread(target=server.serve_forever)
         t.daemon = True
         t.start()
 
-        # Session refresh thread — keeps the 30-second session alive
         r = threading.Thread(target=_session_refresh_worker, args=(server,))
         r.daemon = True
         r.start()
