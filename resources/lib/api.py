@@ -29,6 +29,27 @@ EDGE_HOSTS = [
     'vvo.koryo.tv',        # Russia (VVO)
     'jhb.koryo.tv',        # South Africa (JHB)
 ]
+
+# Maps settings lselect index -> hostname.  Index 0 = Auto (no override).
+SETTINGS_SERVER_MAP = {
+    1: 'koryo.tv',          # Kosovo (PRS)
+    2: 'edge-mtr.koryo.tv', # Canada (MTR)
+    3: 'edge-mcu.koryo.tv', # Macau (MCU)
+    4: 'osk.koryo.tv',      # Japan (OSK)
+    5: 'vvo.koryo.tv',      # Russia (VVO)
+    6: 'jhb.koryo.tv',      # South Africa (JHB)
+}
+
+# Human-readable labels matching the same order as SETTINGS_SERVER_MAP
+SERVER_LABELS = {
+    'koryo.tv':          '🇽🇰 Kosovo (PRS)',
+    'edge-mtr.koryo.tv': '🇨🇦 Canada (MTR)',
+    'edge-mcu.koryo.tv': '🇲🇴 Macau (MCU)',
+    'mtr.koryo.tv':      '🇨🇦 MTR alt',
+    'osk.koryo.tv':      '🇯🇵 Japan (OSK)',
+    'vvo.koryo.tv':      '🇷🇺 Russia (VVO)',
+    'jhb.koryo.tv':      '🇿🇦 South Africa (JHB)',
+}
 EDGE_HOST  = EDGE_HOSTS[0]
 EDGE       = 'https://' + EDGE_HOST
 
@@ -346,10 +367,109 @@ def refresh_session(host, playlist_id, channel_id, cookie_str=''):
     return cookie_str
 
 
-def get_live_stream_url(channel_id, progress_callback=None):
+def probe_all_servers(progress_callback=None):
+    """
+    Run speed tests against every edge host and return a list of dicts:
+      { host, label, latency_ms, speed_mbps, status }
+    status is one of: 'fast' | 'ok' | 'slow' | 'offline'
+    progress_callback(percent, message) is optional.
+    """
+    results = []
+    total   = len(EDGE_HOSTS)
+
+    def _cb(pct, msg):
+        if progress_callback:
+            progress_callback(pct, msg)
+
+    for i, host in enumerate(EDGE_HOSTS):
+        pct   = int(i * 100 / total)
+        label = SERVER_LABELS.get(host, host)
+        _cb(pct, 'Testing {}...'.format(label))
+
+        ctx = _ssl_context()
+        t   = int(time.time() * 1000)
+        probe_path = '/speedtest/probe?bytes=8388608&t={}'.format(t)
+        conn = None
+        latency_ms  = None
+        speed_mbps  = None
+
+        try:
+            conn  = http_client.HTTPSConnection(host, timeout=10, context=ctx)
+            headers = {
+                'User-Agent':    UA,
+                'Accept':        '*/*',
+                'Cache-Control': 'no-cache',
+                'Origin':        'https://koryo.tv',
+                'Referer':       'https://koryo.tv/',
+            }
+            start = time.time()
+            conn.request('GET', probe_path, headers=headers)
+            resp  = conn.getresponse()
+            data  = resp.read()
+            elapsed = time.time() - start
+            if resp.status == 200 and len(data) > 0 and elapsed > 0:
+                latency_ms = round(elapsed * 1000)
+                speed_mbps = round(len(data) / elapsed / (1024 * 1024), 1)
+        except Exception:
+            pass
+        finally:
+            try:
+                if conn: conn.close()
+            except Exception:
+                pass
+
+        # If speedtest probe failed, try /health for latency only
+        if latency_ms is None:
+            conn = None
+            try:
+                conn  = http_client.HTTPSConnection(host, timeout=5, context=ctx)
+                start = time.time()
+                conn.request('GET', '/health', headers={'User-Agent': UA, 'Accept': '*/*'})
+                resp  = conn.getresponse()
+                resp.read()
+                elapsed = time.time() - start
+                if resp.status == 200:
+                    latency_ms = round(elapsed * 1000)
+                    speed_mbps = 0.0
+            except Exception:
+                pass
+            finally:
+                try:
+                    if conn: conn.close()
+                except Exception:
+                    pass
+
+        # Determine status
+        if latency_ms is None:
+            status = 'offline'
+        elif speed_mbps and speed_mbps >= 15:
+            status = 'fast'
+        elif speed_mbps and speed_mbps >= 5:
+            status = 'ok'
+        else:
+            status = 'slow'
+
+        results.append({
+            'host':       host,
+            'label':      label,
+            'latency_ms': latency_ms,
+            'speed_mbps': speed_mbps,
+            'status':     status,
+        })
+        _cb(int((i + 1) * 100 / total), '{}: {}'.format(
+            label,
+            'offline' if latency_ms is None else '{}ms • {} Mbps'.format(
+                latency_ms, speed_mbps if speed_mbps is not None else '—')
+        ))
+
+    return results
+
+
+def get_live_stream_url(channel_id, progress_callback=None, forced_host=None):
     """
     Resolve the best live stream URL for channel_id.
 
+    forced_host: if set, skip speed tests and connect directly to this hostname.
     progress_callback(percent, message) is called throughout so the caller
     can drive a Kodi DialogProgress.  percent is 0-100; message is a
     human-readable string describing what is happening right now.
@@ -360,35 +480,45 @@ def get_live_stream_url(channel_id, progress_callback=None):
         if progress_callback:
             progress_callback(pct, msg)
 
-    total_hosts = len(EDGE_HOSTS)
-    # Speed-test phase uses 0-70 % of the bar; connect phase uses 70-100 %.
+    # --- Forced / manual server ---
+    if forced_host:
+        label = SERVER_LABELS.get(forced_host, forced_host)
+        _cb(50, 'Connecting to {}...'.format(label))
+        try:
+            final_url, cookie_str, playlist_id = _get_live_stream_url_for_host(channel_id, forced_host)
+            _cb(100, 'Connected to {}!'.format(label))
+            xbmc.log('[KoryoTV] Forced host {} -> {}'.format(forced_host, final_url), xbmc.LOGINFO)
+            return final_url, cookie_str, forced_host, playlist_id
+        except Exception as e:
+            raise Exception('Server {} failed: {}'.format(label, e))
+
+    # --- Auto: speed-test all hosts then connect to fastest ---
+    total_hosts    = len(EDGE_HOSTS)
     speed_per_host = 70 // total_hosts if total_hosts else 10
 
     results = []
     for i, host in enumerate(EDGE_HOSTS):
         base_pct = i * speed_per_host
-        short    = host.replace('.koryo.tv', '').replace('koryo.tv', 'koryo.tv')
-        _cb(base_pct, 'Testing {}...'.format(short))
+        label    = SERVER_LABELS.get(host, host)
+        _cb(base_pct, 'Testing {}...'.format(label))
         try:
             speed = _probe_host_speed(host, timeout=10.0)
             if speed is not None:
                 results.append((speed, host))
-                _cb(base_pct + speed_per_host,
-                    '{}: {:.1f} MB/s'.format(short, speed))
+                _cb(base_pct + speed_per_host, '{}: {:.1f} MB/s'.format(label, speed))
             else:
-                _cb(base_pct + speed_per_host,
-                    '{}: unreachable'.format(short))
+                _cb(base_pct + speed_per_host, '{}: unreachable'.format(label))
         except Exception:
-            _cb(base_pct + speed_per_host, '{}: failed'.format(short))
+            _cb(base_pct + speed_per_host, '{}: failed'.format(label))
 
     if results:
         results.sort(key=lambda x: x[0], reverse=True)
-        order = [h for _, h in results] + [
+        order      = [h for _, h in results] + [
             h for h in EDGE_HOSTS if h not in [hh for _, hh in results]]
         best_host  = order[0]
         best_speed = next(s for s, h in results if h == best_host)
-        best_short = best_host.replace('.koryo.tv', '').replace('koryo.tv', 'koryo.tv')
-        _cb(72, 'Best server: {} ({:.1f} MB/s)'.format(best_short, best_speed))
+        best_label = SERVER_LABELS.get(best_host, best_host)
+        _cb(72, 'Best server: {} ({:.1f} MB/s)'.format(best_label, best_speed))
     else:
         order = EDGE_HOSTS[:]
         _cb(72, 'No speed data — trying default order')
@@ -397,19 +527,19 @@ def get_live_stream_url(channel_id, progress_callback=None):
 
     connect_hosts = order
     connect_total = len(connect_hosts)
-    connect_range = 28  # percent allocated to connection attempts
+    connect_range = 28
 
     errors = []
     for idx, host in enumerate(connect_hosts):
         pct   = 72 + (idx * connect_range // connect_total)
-        short = host.replace('.koryo.tv', '').replace('koryo.tv', 'koryo.tv')
-        _cb(pct, 'Connecting to {}...'.format(short))
+        label = SERVER_LABELS.get(host, host)
+        _cb(pct, 'Connecting to {}...'.format(label))
         xbmc.log('[KoryoTV] Trying host: {}'.format(host), xbmc.LOGDEBUG)
         try:
             final_url, cookie_str, playlist_id = _get_live_stream_url_for_host(channel_id, host)
             xbmc.log('[KoryoTV] Chosen host {} -> {} (playlist={})'.format(
                 host, final_url, playlist_id), xbmc.LOGINFO)
-            _cb(100, 'Connected to {}!'.format(short))
+            _cb(100, 'Connected to {}!'.format(label))
             return final_url, cookie_str, host, playlist_id
         except Exception as e:
             xbmc.log('[KoryoTV] Host {} failed: {}'.format(host, e), xbmc.LOGWARNING)

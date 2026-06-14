@@ -21,6 +21,14 @@ PARAMS     = dict(parse_qsl(sys.argv[2][1:]))
 REPORT_PREFIX = 'Korean Central Television 8 PM Report'
 REPORT_QUERY  = REPORT_PREFIX
 
+# Status badge labels
+_STATUS_BADGE = {
+    'fast':    'Fast',
+    'ok':      'OK',
+    'slow':    'Slow',
+    'offline': 'Offline',
+}
+
 # ---------------------------------------------------------------------------
 # Live proxy
 # ---------------------------------------------------------------------------
@@ -306,15 +314,23 @@ def play_live(channel_id, name):
         xbmc.log('[KoryoTV] Reusing cached stream: {} (host={}, playlist={})'.format(
             stream_url, edge_host, playlist_id), xbmc.LOGINFO)
     else:
+        # Check if the user has pinned a specific server in settings
+        server_mode = int(ADDON.getSetting('server_mode') or '0')
+        forced_host = api.SETTINGS_SERVER_MAP.get(server_mode)  # None when mode == 0 (Auto)
+
         dialog = xbmcgui.DialogProgress()
-        dialog.create(ADDON_NAME, 'Finding best server...')
+        if forced_host:
+            label = api.SERVER_LABELS.get(forced_host, forced_host)
+            dialog.create(ADDON_NAME, 'Connecting to {}...'.format(label))
+        else:
+            dialog.create(ADDON_NAME, 'Finding best server...')
 
         def _progress(percent, message):
             dialog.update(percent, message)
 
         try:
             stream_url, cookie_str, edge_host, playlist_id = api.get_live_stream_url(
-                channel_id, progress_callback=_progress)
+                channel_id, progress_callback=_progress, forced_host=forced_host)
             _STREAM_CACHE[channel_id] = (stream_url, cookie_str, edge_host, playlist_id)
             xbmc.log('[KoryoTV] Resolved stream: {} host={} playlist={}'.format(
                 stream_url, edge_host, playlist_id), xbmc.LOGINFO)
@@ -512,6 +528,79 @@ def play(token):
     xbmcplugin.setResolvedUrl(HANDLE, True, listitem=li)
 
 
+def server_test():
+    """Run a speed test against all edge servers, show results, and let the user pick one."""
+    dialog = xbmcgui.DialogProgress()
+    dialog.create(ADDON_NAME, 'Testing servers...')
+
+    results = api.probe_all_servers(
+        progress_callback=lambda pct, msg: dialog.update(pct, msg)
+    )
+    dialog.close()
+
+    # Build display lines for the select dialog
+    # Index 0 will always be "Automatic"
+    STATUS_ICON = {
+        'fast':    '[COLOR lime]●[/COLOR]',
+        'ok':      '[COLOR yellow]●[/COLOR]',
+        'slow':    '[COLOR orange]●[/COLOR]',
+        'offline': '[COLOR red]●[/COLOR]',
+    }
+
+    select_labels = ['[COLOR cyan]🔄 Automatic (speed test on connect)[/COLOR]']
+    # Map select index -> server_mode setting value (1-based, 0=auto)
+    index_to_mode = [0]  # index 0 = Automatic
+
+    # SETTINGS_SERVER_MAP maps mode int -> host; build reverse for lookup
+    host_to_mode = {v: k for k, v in api.SETTINGS_SERVER_MAP.items()}
+
+    for r in results:
+        host   = r['host']
+        label  = r['label']
+        status = r['status']
+        icon   = STATUS_ICON.get(status, '●')
+
+        if r['latency_ms'] is None:
+            detail = '[COLOR red]Offline[/COLOR]'
+        elif r['speed_mbps'] and r['speed_mbps'] > 0:
+            detail = '{}ms  •  {:.1f} MB/s'.format(r['latency_ms'], r['speed_mbps'])
+        else:
+            detail = '{}ms'.format(r['latency_ms'])
+
+        line = '{} {}  [COLOR grey]{}[/COLOR]'.format(icon, label, detail)
+        select_labels.append(line)
+        index_to_mode.append(host_to_mode.get(host, 0))
+
+    # Highlight the currently saved selection
+    current_mode = int(ADDON.getSetting('server_mode') or '0')
+    current_index = 0
+    for i, mode in enumerate(index_to_mode):
+        if mode == current_mode:
+            current_index = i
+            break
+
+    chosen = xbmcgui.Dialog().select(
+        'Select Server  (current: {})'.format(
+            'Automatic' if current_mode == 0
+            else api.SERVER_LABELS.get(api.SETTINGS_SERVER_MAP.get(current_mode, ''), 'Unknown')
+        ),
+        select_labels,
+        preselect=current_index
+    )
+
+    if chosen >= 0:
+        new_mode = index_to_mode[chosen]
+        ADDON.setSetting('server_mode', str(new_mode))
+        if new_mode == 0:
+            msg = 'Server set to Automatic (speed test on connect).'
+        else:
+            host  = api.SETTINGS_SERVER_MAP.get(new_mode, '')
+            msg   = 'Server set to {}.'.format(api.SERVER_LABELS.get(host, host))
+        xbmcgui.Dialog().notification(ADDON_NAME, msg, xbmcgui.NOTIFICATION_INFO, 3000)
+
+    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+
+
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
@@ -527,4 +616,5 @@ elif action == 'search_results': search_results(query=PARAMS.get('query', ''), p
 elif action == 'report':         report(page=PARAMS.get('page', 1))
 elif action == 'donate':         donate()
 elif action == 'play':           play(PARAMS.get('token', ''))
+elif action == 'server_test':    server_test()
 else:                            main_menu()

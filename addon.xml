@@ -10,6 +10,9 @@
     <provides>video</provides>
   </extension>
   <extension point="xbmc.addon.metadata">
+    <reuseLanguageInvoker>true</reuseLanguageInvoker>
+  </extension>
+  <extension point="xbmc.addon.metadata">
     <summary>Koryo TV</summary>
     <description>Browse and stream videos from Koryo TV.</description>
     <platform>all</platform>
