@@ -19,7 +19,6 @@ except ImportError:
 BASE       = 'https://vod.koryofront.org'
 API_BASE   = BASE + '/api/v1'
 
-# Fixed: edge-mcr -> edge-mtr (correct hostname from HAR), koryo.tv is also a valid edge
 EDGE_HOSTS = [
     'edge-mcu.koryo.tv',   # Macau (MCU)
     'edge-mtr.koryo.tv',   # Canada (MTR)  -- was wrongly 'edge-mcr' in original
@@ -42,13 +41,13 @@ SETTINGS_SERVER_MAP = {
 
 # Human-readable labels matching the same order as SETTINGS_SERVER_MAP
 SERVER_LABELS = {
-    'koryo.tv':          '🇽🇰 Kosovo (PRS)',
-    'edge-mtr.koryo.tv': '🇨🇦 Canada (MTR)',
-    'edge-mcu.koryo.tv': '🇲🇴 Macau (MCU)',
-    'mtr.koryo.tv':      '🇨🇦 MTR alt',
-    'osk.koryo.tv':      '🇯🇵 Japan (OSK)',
-    'vvo.koryo.tv':      '🇷🇺 Russia (VVO)',
-    'jhb.koryo.tv':      '🇿🇦 South Africa (JHB)',
+    'koryo.tv':          'Kosovo (PRS)',
+    'edge-mtr.koryo.tv': 'Canada (MTR)',
+    'edge-mcu.koryo.tv': 'Macau (MCU)',
+    'mtr.koryo.tv':      'MTR alt',
+    'osk.koryo.tv':      'Japan (OSK)',
+    'vvo.koryo.tv':      'Russia (VVO)',
+    'jhb.koryo.tv':      'South Africa (JHB)',
 }
 EDGE_HOST  = EDGE_HOSTS[0]
 EDGE       = 'https://' + EDGE_HOST
