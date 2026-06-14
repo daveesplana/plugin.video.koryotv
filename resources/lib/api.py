@@ -20,26 +20,24 @@ BASE       = 'https://vod.koryofront.org'
 API_BASE   = BASE + '/api/v1'
 
 EDGE_HOSTS = [
-    'edge-mcu.koryo.tv',   # Macau (MCU)
-    'edge-mtr.koryo.tv',   # Canada (MTR)  -- was wrongly 'edge-mcr' in original
-    'koryo.tv',            # Main / Kosovo (PRS)
+    'edge-mcu.koryo.tv',
+    'edge-mtr.koryo.tv',
+    'koryo.tv',
     'mtr.koryo.tv',
-    'osk.koryo.tv',        # Japan (OSK)
-    'vvo.koryo.tv',        # Russia (VVO)
-    'jhb.koryo.tv',        # South Africa (JHB)
+    'osk.koryo.tv',
+    'vvo.koryo.tv',
+    'jhb.koryo.tv',
 ]
 
-# Maps settings lselect index -> hostname.  Index 0 = Auto (no override).
 SETTINGS_SERVER_MAP = {
-    1: 'koryo.tv',          # Kosovo (PRS)
-    2: 'edge-mtr.koryo.tv', # Canada (MTR)
-    3: 'edge-mcu.koryo.tv', # Macau (MCU)
-    4: 'osk.koryo.tv',      # Japan (OSK)
-    5: 'vvo.koryo.tv',      # Russia (VVO)
-    6: 'jhb.koryo.tv',      # South Africa (JHB)
+    1: 'koryo.tv',
+    2: 'edge-mtr.koryo.tv',
+    3: 'edge-mcu.koryo.tv',
+    4: 'osk.koryo.tv',
+    5: 'vvo.koryo.tv',
+    6: 'jhb.koryo.tv',
 }
 
-# Human-readable labels matching the same order as SETTINGS_SERVER_MAP
 SERVER_LABELS = {
     'koryo.tv':          'Kosovo (PRS)',
     'edge-mtr.koryo.tv': 'Canada (MTR)',
@@ -155,28 +153,11 @@ def _build_edge_url(host, location):
         return location
     return 'https://' + host + '/' + location
 
-
-# ---------------------------------------------------------------------------
-# Speed test — mirrors what the real browser does
-# Download 8 MB from /speedtest/probe and measure throughput (MB/s)
-# Falls back to /health latency if the probe endpoint fails.
-# ---------------------------------------------------------------------------
-
-# Fixed: probe each host with a real download test (8 MB) rather than just a
-# /health ping.  The real site picks the server with the highest download
-# speed, not the lowest latency, which is what we replicate here.
 def _probe_host_speed(host, timeout=10.0):
-    """
-    Return download speed in MB/s for host, or None if unreachable.
-    Uses /speedtest/probe?bytes=8388608 (8 MB) — exactly what the browser does.
-    Falls back to a /health latency probe (returns a small positive value) so
-    that hosts that don't expose the speedtest endpoint still rank above dead ones.
-    """
     ctx = _ssl_context()
     t = int(time.time() * 1000)
     probe_path = '/speedtest/probe?bytes=8388608&t={}'.format(t)
 
-    # --- download probe ---
     conn = None
     try:
         conn = http_client.HTTPSConnection(host, timeout=timeout, context=ctx)
@@ -207,7 +188,6 @@ def _probe_host_speed(host, timeout=10.0):
         except Exception:
             pass
 
-    # --- fallback: /health latency ---
     conn = None
     try:
         conn = http_client.HTTPSConnection(host, timeout=5, context=ctx)
@@ -218,8 +198,6 @@ def _probe_host_speed(host, timeout=10.0):
         resp.read()
         elapsed = time.time() - start
         if resp.status == 200 and elapsed > 0:
-            # Convert latency to a pseudo-speed so it sorts below real speedtest results
-            # (a 1s ping -> 0.001 pseudo-MB/s, keeping it near the bottom)
             pseudo = 0.001 / elapsed
             xbmc.log('[KoryoTV] Health probe {}: {:.3f}s (pseudo-speed {:.4f})'.format(
                 host, elapsed, pseudo), xbmc.LOGDEBUG)
@@ -299,8 +277,6 @@ def _get_live_stream_url_for_host(channel_id, host):
 
         final_url = _build_edge_url(host, location)
 
-        # Extract the playlist ID from the final URL so the proxy can refresh the session.
-        # URL pattern: /hls/1080p/pl/<playlist_id>.m3u8
         playlist_id = None
         import re as _re
         m = _re.search(r'/pl/([0-9a-f]+)\.m3u8', final_url)
@@ -315,20 +291,8 @@ def _get_live_stream_url_for_host(channel_id, host):
 
     return final_url, cookie_str, playlist_id
 
-
-# ---------------------------------------------------------------------------
-# Session refresh — CRITICAL FIX
-# The server issues sessions that expire in ~30 seconds (expiresIn: 30).
-# The real browser calls /session/refresh?playlistId=<id> every ~25 seconds
-# to keep the playlist alive.  Without this the playlist 404s and playback stops.
-# ---------------------------------------------------------------------------
-
 def refresh_session(host, playlist_id, channel_id, cookie_str=''):
-    """
-    Call /session/refresh?playlistId=<playlist_id> on the given host.
-    Returns the new cookie string (or the original if unchanged).
-    Raises on failure.
-    """
+
     ctx = _ssl_context()
     path = '/session/refresh?playlistId={}'.format(playlist_id)
     headers = {
@@ -367,12 +331,7 @@ def refresh_session(host, playlist_id, channel_id, cookie_str=''):
 
 
 def probe_all_servers(progress_callback=None):
-    """
-    Run speed tests against every edge host and return a list of dicts:
-      { host, label, latency_ms, speed_mbps, status }
-    status is one of: 'fast' | 'ok' | 'slow' | 'offline'
-    progress_callback(percent, message) is optional.
-    """
+
     results = []
     total   = len(EDGE_HOSTS)
 
@@ -417,7 +376,6 @@ def probe_all_servers(progress_callback=None):
             except Exception:
                 pass
 
-        # If speedtest probe failed, try /health for latency only
         if latency_ms is None:
             conn = None
             try:
@@ -438,7 +396,6 @@ def probe_all_servers(progress_callback=None):
                 except Exception:
                     pass
 
-        # Determine status
         if latency_ms is None:
             status = 'offline'
         elif speed_mbps and speed_mbps >= 15:
@@ -465,15 +422,6 @@ def probe_all_servers(progress_callback=None):
 
 
 def get_live_stream_url(channel_id, progress_callback=None, forced_host=None):
-    """
-    Resolve the best live stream URL for channel_id.
-
-    forced_host: if set, skip speed tests and connect directly to this hostname.
-    progress_callback(percent, message) is called throughout so the caller
-    can drive a Kodi DialogProgress.  percent is 0-100; message is a
-    human-readable string describing what is happening right now.
-    If progress_callback is None the function works silently.
-    """
 
     def _cb(pct, msg):
         if progress_callback:
@@ -491,7 +439,6 @@ def get_live_stream_url(channel_id, progress_callback=None, forced_host=None):
         except Exception as e:
             raise Exception('Server {} failed: {}'.format(label, e))
 
-    # --- Auto: speed-test all hosts then connect to fastest ---
     total_hosts    = len(EDGE_HOSTS)
     speed_per_host = 70 // total_hosts if total_hosts else 10
 
