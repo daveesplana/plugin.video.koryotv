@@ -33,9 +33,9 @@ SETTINGS_SERVER_MAP = {
     1: 'koryo.tv',
     2: 'edge-mtr.koryo.tv',
     3: 'edge-mcu.koryo.tv',
-    4: 'osk.koryo.tv',
-    5: 'vvo.koryo.tv',
-    6: 'jhb.koryo.tv',
+    4: 'edge-osk.koryo.tv',
+    5: 'edge-vvo.koryo.tv',
+    6: 'edge-jhb.koryo.tv',
 }
 
 SERVER_LABELS = {
