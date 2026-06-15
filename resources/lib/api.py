@@ -23,10 +23,10 @@ EDGE_HOSTS = [
     'edge-mcu.koryo.tv',
     'edge-mtr.koryo.tv',
     'koryo.tv',
-    'mtr.koryo.tv',
-    'osk.koryo.tv',
-    'vvo.koryo.tv',
-    'jhb.koryo.tv',
+    'edge-mtr.koryo.tv',
+    'edge-osk.koryo.tv',
+    'edge-vvo.koryo.tv',
+    'edge-jhb.koryo.tv',
 ]
 
 SETTINGS_SERVER_MAP = {
