@@ -1,0 +1,56 @@
+# Kodi Media Center language file
+# Addon Name: Koryo TV
+# Addon id: plugin.video.koryotv
+# Addon Provider: daveesplana
+msgid ""
+msgstr ""
+"Project-Id-Version: Koryo TV\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgctxt "#30000"
+msgid "Koryo TV"
+msgstr "高丽电视"
+
+msgctxt "#30001"
+msgid "General"
+msgstr "通用"
+
+msgctxt "#30002"
+msgid "Select Server"
+msgstr "选择服务器"
+
+msgctxt "#30010"
+msgid "Automatic"
+msgstr "自动"
+
+msgctxt "#30011"
+msgid "Kosovo Server (PRS)"
+msgstr "科索沃服务器 (PRS)"
+
+msgctxt "#30012"
+msgid "Canada Server (MTR)"
+msgstr "加拿大服务器 (MTR)"
+
+msgctxt "#30013"
+msgid "Macau Server (MCU)"
+msgstr "澳门服务器 (MCU)"
+
+msgctxt "#30014"
+msgid "Japan Server (OSK)"
+msgstr "日本服务器 (OSK)"
+
+msgctxt "#30015"
+msgid "Russia Server (VVO)"
+msgstr "俄罗斯服务器 (VVO)"
+
+msgctxt "#30016"
+msgid "South Africa Server (JHB)"
+msgstr "南非服务器 (JHB)"
