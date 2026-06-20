@@ -4,6 +4,7 @@ import binascii
 import ssl
 import time
 import xbmc
+import xml.etree.ElementTree as ET
 from http.cookies import SimpleCookie
 
 try:
@@ -66,6 +67,16 @@ LIVE_CHANNELS = [
         'group': 'Live Broadcasts',
     },
 ]
+
+# Maps our internal channel ids to the channel ids used for IPTV Manager /
+# IPTV Merge integration. The 'kctv' id is set to match the <channel id="...">
+# used by the daveesplana/kctv-epg XMLTV guide, so EPG data lines up with the
+# live channel automatically with no manual tvg-id mapping required.
+IPTV_CHANNEL_IDS = {
+    'kctv': 'KoreanCentralTelevision.kp',
+    'kcbs': 'KoreanCentralBroadcastingStation.kp',
+    'vok':  'VoiceOfKorea.kp',
+}
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
 
@@ -513,3 +524,95 @@ def resolve_stream_url(media):
         return fallback
 
     return None
+
+
+def _xmltv_time_to_iso(value):
+    """Convert an XMLTV timestamp ('20260620091600 +0900') to ISO-8601."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    parts = value.split(' ')
+    dt_part = parts[0]
+    tz_part = parts[1] if len(parts) > 1 and parts[1] else '+0000'
+    if len(dt_part) < 14:
+        return None
+    y, mo, d  = dt_part[0:4], dt_part[4:6], dt_part[6:8]
+    h, mi, s  = dt_part[8:10], dt_part[10:12], dt_part[12:14]
+    sign      = tz_part[0] if tz_part[0] in ('+', '-') else '+'
+    tz_digits = tz_part.lstrip('+-')
+    tz_h      = tz_digits[0:2] or '00'
+    tz_m      = tz_digits[2:4] or '00'
+    return '{}-{}-{}T{}:{}:{}{}{}:{}'.format(y, mo, d, h, mi, s, sign, tz_h, tz_m)
+
+
+def fetch_xmltv(url, timeout=20):
+    """Download a remote XMLTV guide file and return the raw bytes."""
+    req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/xml, text/xml, */*'})
+    try:
+        resp = urlopen(req, timeout=timeout, context=_ssl_context())
+    except TypeError:
+        resp = urlopen(req, timeout=timeout)
+    return resp.read()
+
+
+def parse_xmltv_epg(raw, wanted_channel_ids=None):
+    """
+    Parse an XMLTV guide into JSON-EPG format:
+        { channel_id: [ {start, stop, title, description, genre}, ... ] }
+
+    If wanted_channel_ids is given, only those <channel id="..."> entries are
+    kept (matching this add-on's IPTV_CHANNEL_IDS values).
+    """
+    root = ET.fromstring(raw)
+
+    epg = {}
+    seen = set()
+
+    for prog in root.findall('programme'):
+        channel_id = prog.get('channel')
+        if not channel_id:
+            continue
+        if wanted_channel_ids is not None and channel_id not in wanted_channel_ids:
+            continue
+
+        start_iso = _xmltv_time_to_iso(prog.get('start'))
+        stop_iso  = _xmltv_time_to_iso(prog.get('stop'))
+        if not start_iso or not stop_iso:
+            continue
+
+        title_el = prog.find('title')
+        title = (title_el.text or '').strip() if title_el is not None else ''
+        if not title:
+            continue
+
+        dedup_key = (channel_id, start_iso, stop_iso, title)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+
+        entry = {'start': start_iso, 'stop': stop_iso, 'title': title}
+
+        desc_el = prog.find('desc')
+        if desc_el is not None and desc_el.text and desc_el.text.strip():
+            entry['description'] = desc_el.text.strip()
+
+        category_el = prog.find('category')
+        if category_el is not None and category_el.text and category_el.text.strip():
+            entry['genre'] = category_el.text.strip()
+
+        epg.setdefault(channel_id, []).append(entry)
+
+    return epg
+
+
+def get_iptv_epg(url, wanted_channel_ids=None, timeout=20):
+    """Fetch + parse a remote XMLTV guide into JSON-EPG format. Returns {} on failure."""
+    if not url:
+        return {}
+    try:
+        raw = fetch_xmltv(url, timeout=timeout)
+        return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
+    except Exception as e:
+        xbmc.log('[KoryoTV] EPG fetch/parse failed for {}: {}'.format(url, e), xbmc.LOGWARNING)
+        return {}
+

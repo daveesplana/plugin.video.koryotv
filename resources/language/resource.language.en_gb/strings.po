@@ -54,3 +54,23 @@ msgstr ""
 msgctxt "#30016"
 msgid "South Africa Server (JHB)"
 msgstr ""
+
+msgctxt "#30020"
+msgid "Live TV Integration"
+msgstr ""
+
+msgctxt "#30021"
+msgid "Enable IPTV Manager / IPTV Merge integration"
+msgstr ""
+
+msgctxt "#30022"
+msgid "Lets SlyGuy IPTV Merge (or any IPTV Manager-compatible add-on) automatically pull Koryo TV's live channels and EPG into Kodi PVR."
+msgstr ""
+
+msgctxt "#30023"
+msgid "EPG guide.xml URL"
+msgstr ""
+
+msgctxt "#30024"
+msgid "XMLTV guide URL used to provide EPG data for Korean Central Television (KCTV). Leave empty to disable EPG."
+msgstr ""

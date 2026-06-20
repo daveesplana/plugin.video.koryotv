@@ -10,9 +10,10 @@ from urllib.parse import urlencode, parse_qsl, parse_qs, quote, unquote, urljoin
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-from resources.lib import api, utils
+from resources.lib import api, utils, iptvmanager
 
 ADDON      = xbmcaddon.Addon()
+ADDON_ID   = ADDON.getAddonInfo('id')
 ADDON_NAME = ADDON.getAddonInfo('name')
 BASE_URL   = sys.argv[0]
 HANDLE     = int(sys.argv[1])
@@ -556,6 +557,69 @@ def server_test():
 
     xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
 
+def _iptv_stream_url(channel_id, name):
+    return 'plugin://{}/?{}'.format(ADDON_ID, urlencode({
+        'action': 'play_live', 'channel_id': channel_id, 'name': name}))
+
+
+def _build_iptv_channels():
+    channels = []
+    for ch in api.LIVE_CHANNELS:
+        cid = ch['id']
+        channels.append({
+            'id':     api.IPTV_CHANNEL_IDS.get(cid, cid),
+            'name':   ch['name'],
+            'stream': _iptv_stream_url(cid, ch['name']),
+            'logo':   _channel_icon(ch),
+            'group':  'Koryo TV',
+            'radio':  cid in ('kcbs', 'vok'),
+        })
+    return channels
+
+
+def iptv_channels():
+    """Called by IPTV Manager / SlyGuy IPTV Merge to fetch live channels (JSON-STREAMS)."""
+    if (ADDON.getSetting('iptv.enabled') or 'true').lower() != 'true':
+        return
+    port = PARAMS.get('port')
+    if not port:
+        return
+    mgr = iptvmanager.IPTVManager(port)
+    try:
+        mgr.connect()
+    except Exception as e:
+        xbmc.log('[KoryoTV] IPTV Manager channels: socket connect failed: {}'.format(e), xbmc.LOGWARNING)
+        return
+    try:
+        mgr.send({'version': 1, 'streams': _build_iptv_channels()})
+    except Exception as e:
+        xbmc.log('[KoryoTV] IPTV Manager channels: build failed: {}'.format(e), xbmc.LOGERROR)
+        mgr.abort()
+
+
+def iptv_epg():
+    """Called by IPTV Manager / SlyGuy IPTV Merge to fetch EPG data (JSON-EPG)."""
+    if (ADDON.getSetting('iptv.enabled') or 'true').lower() != 'true':
+        return
+    port = PARAMS.get('port')
+    if not port:
+        return
+    mgr = iptvmanager.IPTVManager(port)
+    try:
+        mgr.connect()
+    except Exception as e:
+        xbmc.log('[KoryoTV] IPTV Manager EPG: socket connect failed: {}'.format(e), xbmc.LOGWARNING)
+        return
+    try:
+        epg_url = (ADDON.getSetting('iptv.epg_url') or '').strip()
+        wanted  = set(api.IPTV_CHANNEL_IDS.values())
+        epg     = api.get_iptv_epg(epg_url, wanted_channel_ids=wanted) if epg_url else {}
+        mgr.send({'version': 1, 'epg': epg})
+    except Exception as e:
+        xbmc.log('[KoryoTV] IPTV Manager EPG: build failed: {}'.format(e), xbmc.LOGERROR)
+        mgr.abort()
+
+
 action = PARAMS.get('action', 'main')
 
 if   action == 'main':           main_menu()
@@ -568,4 +632,6 @@ elif action == 'report':         report(page=PARAMS.get('page', 1))
 elif action == 'donate':         donate()
 elif action == 'play':           play(PARAMS.get('token', ''))
 elif action == 'server_test':    server_test()
+elif action == 'iptv_channels':  iptv_channels()
+elif action == 'iptv_epg':       iptv_epg()
 else:                            main_menu()

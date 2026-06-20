@@ -21,5 +21,36 @@
                 </setting>
             </group>
         </category>
+        <category id="iptv" label="30020">
+            <group id="1" label="30020">
+                <setting id="iptv.enabled" type="boolean" label="30021" help="30022">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
+                </setting>
+                <setting id="iptv.epg_url" type="string" label="30023" help="30024">
+                    <level>0</level>
+                    <default>https://raw.githubusercontent.com/daveesplana/kctv-epg/refs/heads/main/guide.xml</default>
+                    <dependencies>
+                        <dependency type="enable" setting="iptv.enabled" operator="is">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>30023</heading>
+                    </control>
+                </setting>
+                <setting id="iptv.channels_uri" type="string">
+                    <level>0</level>
+                    <default>plugin://plugin.video.koryotv/?action=iptv_channels</default>
+                    <visible>false</visible>
+                    <control type="edit" format="string"/>
+                </setting>
+                <setting id="iptv.epg_uri" type="string">
+                    <level>0</level>
+                    <default>plugin://plugin.video.koryotv/?action=iptv_epg</default>
+                    <visible>false</visible>
+                    <control type="edit" format="string"/>
+                </setting>
+            </group>
+        </category>
     </section>
 </settings>
