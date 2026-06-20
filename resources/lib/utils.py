@@ -4,7 +4,6 @@ import xbmcaddon
 ADDON = xbmcaddon.Addon()
 _MEDIA = os.path.join(ADDON.getAddonInfo('path'), 'resources', 'media')
 
-
 def addon_icon():
     return os.path.join(_MEDIA, 'icon.png')
 

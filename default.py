@@ -578,7 +578,6 @@ def _build_iptv_channels():
 
 
 def iptv_channels():
-    """Called by IPTV Manager / SlyGuy IPTV Merge to fetch live channels (JSON-STREAMS)."""
     if (ADDON.getSetting('iptv.enabled') or 'true').lower() != 'true':
         return
     port = PARAMS.get('port')
@@ -598,7 +597,6 @@ def iptv_channels():
 
 
 def iptv_epg():
-    """Called by IPTV Manager / SlyGuy IPTV Merge to fetch EPG data (JSON-EPG)."""
     if (ADDON.getSetting('iptv.enabled') or 'true').lower() != 'true':
         return
     port = PARAMS.get('port')

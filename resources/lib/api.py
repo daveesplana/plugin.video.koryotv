@@ -527,7 +527,6 @@ def resolve_stream_url(media):
 
 
 def _xmltv_time_to_iso(value):
-    """Convert an XMLTV timestamp ('20260620091600 +0900') to ISO-8601."""
     value = (value or '').strip()
     if not value:
         return None
@@ -546,7 +545,6 @@ def _xmltv_time_to_iso(value):
 
 
 def fetch_xmltv(url, timeout=20):
-    """Download a remote XMLTV guide file and return the raw bytes."""
     req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/xml, text/xml, */*'})
     try:
         resp = urlopen(req, timeout=timeout, context=_ssl_context())
@@ -556,13 +554,6 @@ def fetch_xmltv(url, timeout=20):
 
 
 def parse_xmltv_epg(raw, wanted_channel_ids=None):
-    """
-    Parse an XMLTV guide into JSON-EPG format:
-        { channel_id: [ {start, stop, title, description, genre}, ... ] }
-
-    If wanted_channel_ids is given, only those <channel id="..."> entries are
-    kept (matching this add-on's IPTV_CHANNEL_IDS values).
-    """
     root = ET.fromstring(raw)
 
     epg = {}
@@ -606,7 +597,6 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
 
 
 def get_iptv_epg(url, wanted_channel_ids=None, timeout=20):
-    """Fetch + parse a remote XMLTV guide into JSON-EPG format. Returns {} on failure."""
     if not url:
         return {}
     try:
