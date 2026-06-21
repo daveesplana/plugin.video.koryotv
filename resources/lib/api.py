@@ -43,7 +43,6 @@ SERVER_LABELS = {
     'koryo.tv':          'Kosovo (PRS)',
     'edge-mtr.koryo.tv': 'Canada (MTR)',
     'edge-mcu.koryo.tv': 'Macau (MCU)',
-    'edge-mtr.koryo.tv': 'MTR alt',
     'edge-osk.koryo.tv': 'Japan (OSK)',
     'edge-vvo.koryo.tv': 'Russia (VVO)',
     'edge-jhb.koryo.tv': 'South Africa (JHB)',
@@ -68,10 +67,6 @@ LIVE_CHANNELS = [
     },
 ]
 
-# Maps our internal channel ids to the channel ids used for IPTV Manager /
-# IPTV Merge integration. The 'kctv' id is set to match the <channel id="...">
-# used by the daveesplana/kctv-epg XMLTV guide, so EPG data lines up with the
-# live channel automatically with no manual tvg-id mapping required.
 IPTV_CHANNEL_IDS = {
     'kctv': 'KoreanCentralTelevision.kp',
     'kcbs': 'KoreanCentralBroadcastingStation.kp',
