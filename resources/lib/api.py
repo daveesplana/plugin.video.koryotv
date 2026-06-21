@@ -43,10 +43,10 @@ SERVER_LABELS = {
     'koryo.tv':          'Kosovo (PRS)',
     'edge-mtr.koryo.tv': 'Canada (MTR)',
     'edge-mcu.koryo.tv': 'Macau (MCU)',
-    'mtr.koryo.tv':      'MTR alt',
-    'osk.koryo.tv':      'Japan (OSK)',
-    'vvo.koryo.tv':      'Russia (VVO)',
-    'jhb.koryo.tv':      'South Africa (JHB)',
+    'edge-mtr.koryo.tv': 'MTR alt',
+    'edge-osk.koryo.tv': 'Japan (OSK)',
+    'edge-vvo.koryo.tv': 'Russia (VVO)',
+    'edge-jhb.koryo.tv': 'South Africa (JHB)',
 }
 EDGE_HOST  = EDGE_HOSTS[0]
 EDGE       = 'https://' + EDGE_HOST
