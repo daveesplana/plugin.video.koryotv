@@ -82,10 +82,8 @@ HEADERS = {
     'Referer':    'https://koryo.tv/',
 }
 
-
 def _random_hex_token():
     return binascii.hexlify(os.urandom(12)).decode('ascii')
-
 
 def _ssl_context():
     try:
@@ -94,14 +92,12 @@ def _ssl_context():
     except Exception:
         return ssl._create_unverified_context()
 
-
 def _cookies_from_set_cookie(header):
     if not header:
         return ''
     cookie = SimpleCookie()
     cookie.load(header)
     return '; '.join(['{}={}'.format(m.key, m.value) for m in cookie.values()])
-
 
 def _parse_json(raw):
     if isinstance(raw, bytes):
@@ -600,4 +596,3 @@ def get_iptv_epg(url, wanted_channel_ids=None, timeout=20):
     except Exception as e:
         xbmc.log('[KoryoTV] EPG fetch/parse failed for {}: {}'.format(url, e), xbmc.LOGWARNING)
         return {}
-

@@ -30,7 +30,7 @@
                 </setting>
                 <setting id="iptv.epg_url" type="string" label="30023" help="30024">
                     <level>0</level>
-                    <default>https://raw.githubusercontent.com/daveesplana/kctv-epg/refs/heads/main/guide.xml</default>
+                    <default>https://koryofront.org/api/epg</default>
                     <dependencies>
                         <dependency type="enable" setting="iptv.enabled" operator="is">true</dependency>
                     </dependencies>
