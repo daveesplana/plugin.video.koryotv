@@ -138,6 +138,7 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self.send_error(502, str(e))
 
 import time as _time_mod
+import time  # also expose as 'time' for the proxy handler's last_refresh assignment
 
 def _session_refresh_worker(server):
     while True:
