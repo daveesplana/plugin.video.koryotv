@@ -225,8 +225,9 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
 
 def _channel_icon(ch):
     cid = ch.get('id', '')
-    if cid == 'kctv':  return utils.kctv_icon()
-    if cid == 'vok':   return utils.vok_icon()
+    if cid == 'KCTV':  return utils.kctv_icon()
+    if cid == 'KCBS':   return utils.kcbs_icon()
+    if cid == 'VOK':  return utils.vok_icon()
     return utils.live_icon()
 
 def main_menu():
@@ -624,7 +625,7 @@ action = PARAMS.get('action', 'main')
 if   action == 'main':           main_menu()
 elif action == 'listing':        listing(page=PARAMS.get('page', 1), ordering=PARAMS.get('ordering', '-add_date'))
 elif action == 'live':           live()
-elif action == 'play_live':      play_live(channel_id=PARAMS.get('channel_id', 'kctv'), name=PARAMS.get('name', 'Live TV'))
+elif action == 'play_live':      play_live(channel_id=PARAMS.get('channel_id', 'KCTV'), name=PARAMS.get('name', 'Live TV'))
 elif action == 'search':         search()
 elif action == 'search_results': search_results(query=PARAMS.get('query', ''), page=PARAMS.get('page', 1))
 elif action == 'report':         report(page=PARAMS.get('page', 1))
