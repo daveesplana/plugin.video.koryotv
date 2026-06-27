@@ -52,16 +52,16 @@ EDGE       = 'https://' + EDGE_HOST
 
 LIVE_CHANNELS = [
     {
-        'id':   'kctv',
-        'name': 'Korean Central Television (KCTV)',
+        'id':   'KCTV',
+        'name': 'Korean Central Television',
     },
     {
-        'id':   'kcbs',
+        'id':   'KCBS',
         'name': 'Korean Central Broadcasting Station',
         'group': 'Live Broadcasts',
     },
     {
-        'id':   'vok',
+        'id':   'VOK',
         'name': 'Voice of Korea',
         'group': 'Live Broadcasts',
     },
