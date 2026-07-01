@@ -17,7 +17,7 @@ except ImportError:
     from urllib import urlencode
     import httplib as http_client
 
-BASE       = 'https://vod.koryofront.org'
+BASE       = 'https://old.vod.koryo.tv'
 API_BASE   = BASE + '/api/v1'
 
 EDGE_HOSTS = [
