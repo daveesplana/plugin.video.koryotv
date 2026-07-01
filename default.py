@@ -34,6 +34,7 @@ _PROXY_SERVER = None
 _STREAM_CACHE = {}
 
 _SESSION_REFRESH_INTERVAL = 25
+_STREAM_CACHE_TTL = 60
 
 
 class _ProxyHandler(BaseHTTPRequestHandler):
@@ -101,7 +102,7 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                         if new_cookie:
                             self.server.live_headers['Cookie'] = new_cookie
                         self.server.last_refresh = time.time()
-                        _STREAM_CACHE[self.server.channel_id] = (new_url, new_cookie, new_host, new_playlist_id)
+                        _set_cached_stream(self.server.channel_id, new_url, new_cookie, new_host, new_playlist_id)
                         continue
                     except Exception as e2:
                         xbmc.log('[KoryoTV] Playlist refresh failed: {}'.format(e2), xbmc.LOGERROR)
@@ -140,6 +141,27 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 import time as _time_mod
 import time  # also expose as 'time' for the proxy handler's last_refresh assignment
 
+def _set_cached_stream(channel_id, stream_url, cookie_str, edge_host, playlist_id, ttl=_STREAM_CACHE_TTL):
+    now = time.time()
+    _STREAM_CACHE[channel_id] = {
+        'stream_url': stream_url,
+        'cookie_str': cookie_str,
+        'edge_host': edge_host,
+        'playlist_id': playlist_id,
+        'expires_at': now + ttl,
+    }
+
+
+def _get_cached_stream(channel_id):
+    entry = _STREAM_CACHE.get(channel_id)
+    if not entry:
+        return None
+    if time.time() >= entry.get('expires_at', 0):
+        _STREAM_CACHE.pop(channel_id, None)
+        return None
+    return entry['stream_url'], entry['cookie_str'], entry['edge_host'], entry['playlist_id']
+
+
 def _session_refresh_worker(server):
     while True:
         _time_mod.sleep(_SESSION_REFRESH_INTERVAL)
@@ -155,8 +177,8 @@ def _session_refresh_worker(server):
             if new_cookie and new_cookie != old_cookie:
                 server.live_headers['Cookie'] = new_cookie
                 if channel_id in _STREAM_CACHE:
-                    url, _, h, pid = _STREAM_CACHE[channel_id]
-                    _STREAM_CACHE[channel_id] = (url, new_cookie, h, pid)
+                    entry = _STREAM_CACHE[channel_id]
+                    entry['cookie_str'] = new_cookie
 
             xbmc.log('[KoryoTV] Session auto-refreshed for {} playlist={}'.format(
                 channel_id, playlist_id), xbmc.LOGDEBUG)
@@ -276,9 +298,12 @@ def live():
 
 
 def play_live(channel_id, name):
-    xbmc.log('[KoryoTV] play_live: channel={}'.format(channel_id), xbmc.LOGINFO)
+    channel_key = api._normalize_channel_id(channel_id)
+    xbmc.log('[KoryoTV] play_live: channel={} (key={})'.format(channel_id, channel_key), xbmc.LOGINFO)
 
-    cached = _STREAM_CACHE.get(channel_id)
+    cached = _get_cached_stream(channel_key)
+    if not cached and channel_id:
+        cached = _get_cached_stream(channel_id)
     if cached:
         stream_url, cookie_str, edge_host, playlist_id = cached
         xbmc.log('[KoryoTV] Reusing cached stream: {} (host={}, playlist={})'.format(
@@ -299,8 +324,10 @@ def play_live(channel_id, name):
 
         try:
             stream_url, cookie_str, edge_host, playlist_id = api.get_live_stream_url(
-                channel_id, progress_callback=_progress, forced_host=forced_host)
-            _STREAM_CACHE[channel_id] = (stream_url, cookie_str, edge_host, playlist_id)
+                channel_key, progress_callback=_progress, forced_host=forced_host)
+            _set_cached_stream(channel_key, stream_url, cookie_str, edge_host, playlist_id)
+            if channel_id != channel_key:
+                _set_cached_stream(channel_id, stream_url, cookie_str, edge_host, playlist_id)
             xbmc.log('[KoryoTV] Resolved stream: {} host={} playlist={}'.format(
                 stream_url, edge_host, playlist_id), xbmc.LOGINFO)
         except Exception as e:
@@ -315,7 +342,7 @@ def play_live(channel_id, name):
         'User-Agent':    api.UA,
         'Accept':        '*/*',
         'Origin':        'https://koryo.tv',
-        'Referer':       'https://koryo.tv/channel/{}'.format(channel_id),
+        'Referer':       'https://koryo.tv/channel/{}'.format(channel_key),
         'Cache-Control': 'no-cache',
         'Connection':    'keep-alive',
     }

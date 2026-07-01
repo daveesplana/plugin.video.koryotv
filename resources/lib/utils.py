@@ -16,10 +16,10 @@ def play_icon():
 def live_icon():
     return os.path.join(_MEDIA, 'live.png')
 
-def KCTV_icon():
+def kctv_icon():
     return os.path.join(_MEDIA, 'kctv.png')
 
-def VOK_icon():
+def vok_icon():
     return os.path.join(_MEDIA, 'vok.png')
 
 def report_icon():

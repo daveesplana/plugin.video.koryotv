@@ -68,12 +68,12 @@ LIVE_CHANNELS = [
 ]
 
 IPTV_CHANNEL_IDS = {
-    'KCTV': 'KCTV',
-    'KCBS': 'KCBS',
-    'VOK':  'VOK',
+    'KCTV': 'kctv',
+    'KCBS': 'kcbs',
+    'VOK':  'vok',
 }
 
-UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.4022.98'
 
 HEADERS = {
     'User-Agent': UA,
@@ -84,6 +84,13 @@ HEADERS = {
 
 def _random_hex_token():
     return binascii.hexlify(os.urandom(12)).decode('ascii')
+
+
+def _normalize_channel_id(channel_id):
+    if not channel_id:
+        return ''
+    return str(channel_id).strip().lower()
+
 
 def _ssl_context():
     try:
@@ -214,7 +221,8 @@ def _get_live_stream_url_for_host(channel_id, host):
     ctx = _ssl_context()
     conn = http_client.HTTPSConnection(host, timeout=15, context=ctx)
 
-    channel_referer = 'https://koryo.tv/channel/{}'.format(channel_id)
+    channel_key = _normalize_channel_id(channel_id)
+    channel_referer = 'https://koryo.tv/channel/{}'.format(channel_key)
     live_headers = {
         'User-Agent':      UA,
         'Accept':          'application/json',
@@ -231,8 +239,8 @@ def _get_live_stream_url_for_host(channel_id, host):
     }
 
     try:
-        if channel_id in ('kcbs', 'vok'):
-            quality = 'radio-{}'.format(channel_id)
+        if channel_key in ('kcbs', 'vok'):
+            quality = 'radio-{}'.format(channel_key)
         else:
             quality = '1080p'
 
@@ -253,9 +261,9 @@ def _get_live_stream_url_for_host(channel_id, host):
             live_headers2['Cookie'] = cookie_str
 
         if quality.startswith('radio-'):
-            live_path = '/radio/{}/b/{}.m3u8'.format(channel_id, random_token)
+            live_path = '/radio/{}/b/{}.m3u8'.format(channel_key, random_token)
         else:
-            live_path = '/{}/live/{}.m3u8'.format(channel_id, random_token)
+            live_path = '/{}/live/{}.m3u8'.format(channel_key, random_token)
 
         conn.request('GET', live_path, headers=live_headers2)
         resp2 = conn.getresponse()
@@ -290,12 +298,13 @@ def _get_live_stream_url_for_host(channel_id, host):
 def refresh_session(host, playlist_id, channel_id, cookie_str=''):
 
     ctx = _ssl_context()
+    channel_key = _normalize_channel_id(channel_id)
     path = '/session/refresh?playlistId={}'.format(playlist_id)
     headers = {
         'User-Agent':    UA,
         'Accept':        'application/json',
         'Origin':        'https://koryo.tv',
-        'Referer':       'https://koryo.tv/channel/{}'.format(channel_id),
+        'Referer':       'https://koryo.tv/channel/{}'.format(channel_key),
         'Cache-Control': 'no-cache',
         'Pragma':        'no-cache',
     }
