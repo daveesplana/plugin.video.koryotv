@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import binascii
 import ssl
 import time
@@ -88,7 +89,24 @@ def _random_hex_token():
 def _normalize_channel_id(channel_id):
     if not channel_id:
         return ''
-    return str(channel_id).strip().lower()
+
+    value = str(channel_id).strip().lower()
+    if not value:
+        return ''
+
+    compact = re.sub(r'[^a-z0-9]+', '', value)
+
+    if compact in ('kctv', 'kcbs', 'vok'):
+        return compact
+
+    if 'kctv' in compact or 'koreancentraltelevision' in compact:
+        return 'kctv'
+    if 'kcbs' in compact or 'koreancentralbroadcastingstation' in compact:
+        return 'kcbs'
+    if 'vok' in compact or 'voiceofkorea' in compact:
+        return 'vok'
+
+    return compact
 
 
 def _ssl_context():

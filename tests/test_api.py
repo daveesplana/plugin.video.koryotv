@@ -156,6 +156,11 @@ class LiveChannelIdTests(unittest.TestCase):
         self.assertEqual(api._normalize_channel_id('VOK'), 'vok')
         self.assertEqual(api._normalize_channel_id('kctv'), 'kctv')
 
+    def test_custom_channel_ids_map_to_known_live_endpoints(self):
+        self.assertEqual(api._normalize_channel_id('Channel KCTV'), 'kctv')
+        self.assertEqual(api._normalize_channel_id('KCTV-1'), 'kctv')
+        self.assertEqual(api._normalize_channel_id('Voice of Korea 2'), 'vok')
+
     def test_radio_channels_use_the_lowercase_endpoint_key(self):
         channel_key = api._normalize_channel_id('KCBS')
         self.assertIn(channel_key, ('kcbs', 'vok'))
