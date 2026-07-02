@@ -613,7 +613,7 @@ def _build_iptv_channels():
             'stream': _iptv_stream_url(cid, ch['name']),
             'logo':   _channel_icon(ch),
             'group':  'Koryo TV',
-            'radio':  cid in ('kcbs', 'vok'),
+            'radio':  cid in ('KCBS', 'VOK'),
         })
     return channels
 
