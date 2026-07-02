@@ -247,11 +247,22 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
 
 def _channel_icon(ch):
     cid = ch.get('id', '')
-    key = api._normalize_channel_id(cid)
-    if key == 'kctv':  return utils.kctv_icon()
-    if key == 'kcbs':   return utils.kcbs_icon()
-    if key == 'vok':  return utils.vok_icon()
-    return utils.live_icon()
+    try:
+        key = api._normalize_channel_id(cid)
+    except Exception:
+        key = ''
+
+    if key == 'kctv':
+        return getattr(utils, 'kctv_icon', lambda: utils.live_icon())()
+    if key == 'kcbs':
+        return getattr(utils, 'kcbs_icon', lambda: utils.live_icon())()
+    if key == 'vok':
+        return getattr(utils, 'vok_icon', lambda: utils.live_icon())()
+
+    try:
+        return utils.live_icon()
+    except Exception:
+        return ''
 
 def main_menu():
     entries = [

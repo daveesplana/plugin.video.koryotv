@@ -165,6 +165,12 @@ class LiveChannelIdTests(unittest.TestCase):
         channel_key = api._normalize_channel_id('KCBS')
         self.assertIn(channel_key, ('kcbs', 'vok'))
 
+    def test_live_channel_icon_selection_does_not_crash_for_kcbs(self):
+        import default as default_module
+
+        icon = default_module._channel_icon({'id': 'KCBS'})
+        self.assertTrue(icon)
+
 
 if __name__ == '__main__':
     unittest.main()
