@@ -68,9 +68,9 @@ msgid "Lets IPTV Merge automatically pull Koryo TV's live channels and EPG into 
 msgstr ""
 
 msgctxt "#30023"
-msgid "EPG URL"
+msgid "Enable EPG"
 msgstr ""
 
 msgctxt "#30024"
-msgid "EPG URL used to provide EPG data for Korean Central Television (KCTV). Leave empty to disable EPG."
+msgid "Enable the built-in EPG feed for Korean Central Television (KCTV)."
 msgstr ""

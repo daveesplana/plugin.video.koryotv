@@ -68,9 +68,9 @@ msgid "Lets SlyGuy IPTV Merge (or any IPTV Manager-compatible add-on) automatica
 msgstr ""
 
 msgctxt "#30023"
-msgid "EPG guide.xml URL"
+msgid "Enable EPG"
 msgstr ""
 
 msgctxt "#30024"
-msgid "XMLTV guide URL used to provide EPG data for Korean Central Television (KCTV). Leave empty to disable EPG."
+msgid "Enable the built-in EPG feed for Korean Central Television (KCTV)."
 msgstr ""

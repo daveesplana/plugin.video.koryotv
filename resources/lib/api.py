@@ -613,12 +613,153 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
     return epg
 
 
+def _coerce_text(value):
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ('en', 'en_US', 'en-gb', 'en-us', 'en_US', 'default', 'title'):
+            if isinstance(value.get(key), str):
+                return value.get(key).strip()
+        for subvalue in value.values():
+            if isinstance(subvalue, str) and subvalue.strip():
+                return subvalue.strip()
+        return ''
+    return str(value).strip()
+
+
+def _normalize_epg_datetime(value, base_date=None):
+    if value is None:
+        return ''
+
+    if isinstance(value, (int, float)):
+        return time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(value))
+
+    if not isinstance(value, str):
+        value = str(value)
+
+    value = value.strip()
+    if not value:
+        return ''
+
+    if 'T' in value:
+        value = value.replace(' ', 'T')
+    else:
+        if len(value) == 5 and ':' in value:
+            if base_date:
+                value = '{}T{}'.format(base_date, value)
+            else:
+                value = '{}T{}'.format(time.strftime('%Y-%m-%d'), value)
+        else:
+            value = value.replace(' ', 'T')
+
+    if len(value) == 10 and '-' in value:
+        value = '{}T00:00:00'.format(value)
+
+    if len(value) == 16 and ':' in value:
+        value = '{}:00'.format(value)
+
+    return value
+
+
+def parse_json_epg(payload, wanted_channel_ids=None):
+    if not payload:
+        return {}
+
+    epg = {}
+    seen = set()
+
+    programs = payload.get('programs') if isinstance(payload, dict) else None
+    if not isinstance(programs, list):
+        programs = []
+
+    base_date = None
+    default_channel_id = None
+    if isinstance(payload, dict):
+        base_date = payload.get('date') or payload.get('day')
+        default_channel_id = payload.get('channel') or payload.get('channel_id') or payload.get('channelId')
+    if isinstance(base_date, (int, float)):
+        base_date = time.strftime('%Y-%m-%d', time.localtime(base_date))
+    if not isinstance(base_date, str):
+        base_date = ''
+    base_date = base_date.strip()
+
+    for prog in programs:
+        if not isinstance(prog, dict):
+            continue
+
+        channel_id = prog.get('channel') or prog.get('channel_id') or prog.get('channelId') or default_channel_id
+        if not channel_id:
+            continue
+        channel_key = str(channel_id).strip().lower()
+        if wanted_channel_ids is not None:
+            if channel_key not in wanted_channel_ids and channel_id not in wanted_channel_ids:
+                continue
+
+        start_iso = prog.get('start') or prog.get('start_time') or prog.get('startTime')
+        stop_iso = prog.get('stop') or prog.get('end') or prog.get('end_time') or prog.get('endTime')
+        title = _coerce_text(prog.get('title'))
+        if not title:
+            continue
+
+        start_iso = _normalize_epg_datetime(start_iso, base_date=base_date)
+        stop_iso = _normalize_epg_datetime(stop_iso, base_date=base_date)
+
+        if not start_iso or not stop_iso:
+            continue
+
+        dedup_key = (channel_key, start_iso, stop_iso, title)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+
+        entry = {'start': start_iso, 'stop': stop_iso, 'title': title}
+
+        description = prog.get('description') or prog.get('desc') or prog.get('details')
+        if description:
+            entry['description'] = str(description).strip()
+
+        genre = prog.get('genre') or prog.get('category')
+        if genre:
+            entry['genre'] = str(genre).strip()
+
+        epg.setdefault(channel_key, []).append(entry)
+
+    return epg
+
+
 def get_iptv_epg(url, wanted_channel_ids=None, timeout=20):
     if not url:
         return {}
     try:
-        raw = fetch_xmltv(url, timeout=timeout)
-        return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
+        if url.startswith('http://') or url.startswith('https://'):
+            raw = fetch_xmltv(url, timeout=timeout)
+            return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
+        return {}
     except Exception as e:
         xbmc.log('[KoryoTV] EPG fetch/parse failed for {}: {}'.format(url, e), xbmc.LOGWARNING)
+        return {}
+
+
+def build_default_epg_url(date_value=None):
+    if not date_value:
+        date_value = time.strftime('%Y-%m-%d')
+    return 'https://juche-tv-epg-api.vercel.app/api/bloxyplaytv?ch=KCTV&date={}'.format(date_value)
+
+
+def get_default_iptv_epg(wanted_channel_ids=None, timeout=20):
+    url = build_default_epg_url()
+    try:
+        req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+        response = urlopen(req, timeout=timeout, context=_ssl_context())
+        payload = _parse_json(response.read())
+        return parse_json_epg(payload, wanted_channel_ids=wanted_channel_ids)
+    except TypeError:
+        req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+        response = urlopen(req, timeout=timeout)
+        payload = _parse_json(response.read())
+        return parse_json_epg(payload, wanted_channel_ids=wanted_channel_ids)
+    except Exception as e:
+        xbmc.log('[KoryoTV] Default EPG fetch/parse failed for {}: {}'.format(url, e), xbmc.LOGWARNING)
         return {}

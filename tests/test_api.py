@@ -171,6 +171,48 @@ class LiveChannelIdTests(unittest.TestCase):
         icon = default_module._channel_icon({'id': 'KCBS'})
         self.assertTrue(icon)
 
+    def test_json_epg_payload_is_converted_to_iptv_format(self):
+        payload = {
+            'programs': [{
+                'channel': 'KCTV',
+                'start': '2026-07-04T19:00:00+09:00',
+                'stop': '2026-07-04T20:00:00+09:00',
+                'title': 'News',
+                'description': 'Evening bulletin',
+            }]
+        }
+
+        epg = api.parse_json_epg(payload, wanted_channel_ids={'kctv'})
+        self.assertIn('kctv', epg)
+        self.assertEqual(epg['kctv'][0]['title'], 'News')
+        self.assertEqual(epg['kctv'][0]['description'], 'Evening bulletin')
+
+    def test_json_epg_payload_with_language_titles_and_time_only_times_is_converted(self):
+        payload = {
+            'channel': 'KCTV',
+            'date': '2026-07-04',
+            'programs': [{
+                'start': '09:13',
+                'end': '09:40',
+                'title': {
+                    'en': 'Morning News',
+                    'ko': '아침 뉴스',
+                },
+                'category': 'News',
+            }]
+        }
+
+        epg = api.parse_json_epg(payload, wanted_channel_ids={'kctv'})
+        self.assertIn('kctv', epg)
+        self.assertEqual(epg['kctv'][0]['title'], 'Morning News')
+        self.assertEqual(epg['kctv'][0]['start'], '2026-07-04T09:13:00')
+        self.assertEqual(epg['kctv'][0]['stop'], '2026-07-04T09:40:00')
+        self.assertEqual(epg['kctv'][0]['genre'], 'News')
+
+    def test_default_epg_url_uses_the_current_date(self):
+        url = api.build_default_epg_url('2026-07-05')
+        self.assertIn('date=2026-07-05', url)
+
 
 if __name__ == '__main__':
     unittest.main()

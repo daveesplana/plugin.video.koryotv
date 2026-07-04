@@ -28,15 +28,13 @@
                     <default>true</default>
                     <control type="toggle"/>
                 </setting>
-                <setting id="iptv.epg_url" type="string" label="30023" help="30024">
+                <setting id="iptv.epg_enabled" type="boolean" label="30023" help="30024">
                     <level>0</level>
-                    <default>https://koryofront.org/api/epg</default>
+                    <default>true</default>
                     <dependencies>
                         <dependency type="enable" setting="iptv.enabled" operator="is">true</dependency>
                     </dependencies>
-                    <control type="edit" format="string">
-                        <heading>30023</heading>
-                    </control>
+                    <control type="toggle"/>
                 </setting>
                 <setting id="iptv.channels_uri" type="string">
                     <level>0</level>

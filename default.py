@@ -650,9 +650,11 @@ def iptv_epg():
         xbmc.log('[KoryoTV] IPTV Manager EPG: socket connect failed: {}'.format(e), xbmc.LOGWARNING)
         return
     try:
-        epg_url = (ADDON.getSetting('iptv.epg_url') or '').strip()
-        wanted  = set(api.IPTV_CHANNEL_IDS.values())
-        epg     = api.get_iptv_epg(epg_url, wanted_channel_ids=wanted) if epg_url else {}
+        enabled = (ADDON.getSetting('iptv.enabled') or 'true').lower() == 'true'
+        if not enabled:
+            return
+        wanted = set(api.IPTV_CHANNEL_IDS.values())
+        epg = api.get_default_iptv_epg(wanted_channel_ids=wanted)
         mgr.send({'version': 1, 'epg': epg})
     except Exception as e:
         xbmc.log('[KoryoTV] IPTV Manager EPG: build failed: {}'.format(e), xbmc.LOGERROR)
