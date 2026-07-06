@@ -758,6 +758,8 @@ action = PARAMS.get('action', 'main')
 
 if   action == 'main':           main_menu()
 elif action == 'listing':        listing(page=PARAMS.get('page', 1), ordering=PARAMS.get('ordering', '-add_date'))
+elif action == 'media_categories': media_categories()
+elif action == 'media_category': media_category(category_key=PARAMS.get('category_key', ''))
 elif action == 'live':           live()
 elif action == 'play_live':      play_live(channel_id=PARAMS.get('channel_id', 'KCTV'), name=PARAMS.get('name', 'Live TV'))
 elif action == 'search':         search()
