@@ -706,7 +706,7 @@ def _build_iptv_channels():
             'stream': _iptv_stream_url(cid, ch['name']),
             'logo':   _channel_icon(ch),
             'group':  'Koryo TV',
-            'radio':  cid in ('KCBS', 'VOK'),
+            'radio':  True if cid in ('KCBS', 'VOK') else False,
         })
     return channels
 
