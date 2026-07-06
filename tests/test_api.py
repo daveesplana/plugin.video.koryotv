@@ -209,9 +209,22 @@ class LiveChannelIdTests(unittest.TestCase):
         self.assertEqual(epg['kctv'][0]['stop'], '2026-07-04T09:40:00+09:00')
         self.assertEqual(epg['kctv'][0]['genre'], 'News')
 
-    def test_default_epg_url_uses_the_current_date(self):
-        url = api.build_default_epg_url('2026-07-05')
-        self.assertIn('date=2026-07-05', url)
+    def test_default_epg_url_uses_the_koryofront_epg_endpoint_for_kctv(self):
+        url = api.build_default_epg_url()
+        self.assertEqual(url, 'https://koryofront.org/api/epg?channel=KCTV')
+
+    def test_xmltv_epg_channels_are_normalized_for_iptv_channel_ids(self):
+        raw = b'''<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="KCTV"><display-name lang="en">Korean Central Television</display-name></channel>
+  <programme start="20260706120000 +0900" stop="20260706123000 +0900" channel="KCTV">
+    <title>News</title>
+  </programme>
+</tv>'''
+
+        epg = api.parse_xmltv_epg(raw, wanted_channel_ids={'kctv'})
+        self.assertIn('kctv', epg)
+        self.assertEqual(epg['kctv'][0]['title'], 'News')
 
     def test_thumb_url_uses_the_kctv_thumbnail_endpoint(self):
         thumb = api.build_thumb_url('/recordings/News/8pm%20News%20%5B2026-07-04%5D.mp4', timestamp=5)

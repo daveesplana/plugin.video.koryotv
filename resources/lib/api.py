@@ -685,8 +685,10 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
         channel_id = prog.get('channel')
         if not channel_id:
             continue
-        if wanted_channel_ids is not None and channel_id not in wanted_channel_ids:
-            continue
+        channel_key = _normalize_channel_id(channel_id)
+        if wanted_channel_ids is not None:
+            if channel_key not in wanted_channel_ids and str(channel_id).strip() not in wanted_channel_ids:
+                continue
 
         start_iso = _xmltv_time_to_iso(prog.get('start'))
         stop_iso  = _xmltv_time_to_iso(prog.get('stop'))
@@ -698,7 +700,7 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
         if not title:
             continue
 
-        dedup_key = (channel_id, start_iso, stop_iso, title)
+        dedup_key = (channel_key, start_iso, stop_iso, title)
         if dedup_key in seen:
             continue
         seen.add(dedup_key)
@@ -713,7 +715,8 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
         if category_el is not None and category_el.text and category_el.text.strip():
             entry['genre'] = category_el.text.strip()
 
-        epg.setdefault(channel_id, []).append(entry)
+        for alias in set(filter(None, [channel_key, str(channel_id).strip()])):
+            epg.setdefault(alias, []).append(entry)
 
     return epg
 
@@ -852,23 +855,21 @@ def get_iptv_epg(url, wanted_channel_ids=None, timeout=20):
 
 
 def build_default_epg_url(date_value=None):
-    if not date_value:
-        date_value = time.strftime('%Y-%m-%d')
-    return 'https://juche-tv-epg-api.vercel.app/api/bloxyplaytv?ch=KCTV&date={}'.format(date_value)
+    return 'https://koryofront.org/api/epg?channel=KCTV'
 
 
 def get_default_iptv_epg(wanted_channel_ids=None, timeout=20):
     url = build_default_epg_url()
     try:
-        req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+        req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/xml, text/xml, */*'})
         response = urlopen(req, timeout=timeout, context=_ssl_context())
-        payload = _parse_json(response.read())
-        return parse_json_epg(payload, wanted_channel_ids=wanted_channel_ids)
+        raw = response.read()
+        return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
     except TypeError:
-        req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+        req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/xml, text/xml, */*'})
         response = urlopen(req, timeout=timeout)
-        payload = _parse_json(response.read())
-        return parse_json_epg(payload, wanted_channel_ids=wanted_channel_ids)
+        raw = response.read()
+        return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
     except Exception as e:
         xbmc.log('[KoryoTV] Default EPG fetch/parse failed for {}: {}'.format(url, e), xbmc.LOGWARNING)
         return {}
