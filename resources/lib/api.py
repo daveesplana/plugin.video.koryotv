@@ -69,9 +69,9 @@ LIVE_CHANNELS = [
 ]
 
 IPTV_CHANNEL_IDS = {
-    'KCTV': 'kctv',
-    'KCBS': 'kcbs',
-    'VOK':  'vok',
+    'KCTV': 'KCTV',
+    'KCBS': 'KCBS',
+    'VOK':  'VOK',
 }
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.4022.98'
@@ -686,8 +686,9 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
         if not channel_id:
             continue
         channel_key = _normalize_channel_id(channel_id)
+        source_channel_id = str(channel_id).strip()
         if wanted_channel_ids is not None:
-            if channel_key not in wanted_channel_ids and str(channel_id).strip() not in wanted_channel_ids:
+            if channel_key not in wanted_channel_ids and source_channel_id not in wanted_channel_ids:
                 continue
 
         start_iso = _xmltv_time_to_iso(prog.get('start'))
@@ -715,7 +716,7 @@ def parse_xmltv_epg(raw, wanted_channel_ids=None):
         if category_el is not None and category_el.text and category_el.text.strip():
             entry['genre'] = category_el.text.strip()
 
-        for alias in set(filter(None, [channel_key, str(channel_id).strip()])):
+        for alias in set(filter(None, [channel_key, source_channel_id])):
             epg.setdefault(alias, []).append(entry)
 
     return epg

@@ -171,6 +171,15 @@ class LiveChannelIdTests(unittest.TestCase):
         icon = default_module._channel_icon({'id': 'KCBS'})
         self.assertTrue(icon)
 
+    def test_iptv_channel_ids_match_the_epg_source_channel_ids(self):
+        import default as default_module
+
+        channels = default_module._build_iptv_channels()
+        ids = {entry['id'] for entry in channels}
+        self.assertIn('KCTV', ids)
+        self.assertIn('KCBS', ids)
+        self.assertIn('VOK', ids)
+
     def test_json_epg_payload_is_converted_to_iptv_format(self):
         payload = {
             'programs': [{
