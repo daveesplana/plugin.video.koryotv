@@ -270,13 +270,17 @@ def main_menu():
          'icon':  utils.live_icon(),
          'params': {'action': 'live'},
          'isFolder': True},
-        {'label': 'Video Library',
-         'icon':  utils.play_icon(),
-         'params': {'action': 'listing', 'page': 1, 'ordering': '-add_date'},
-         'isFolder': True},
         {'label': 'News',
          'icon':  utils.report_icon(),
-         'params': {'action': 'report', 'page': 1},
+         'params': {'action': 'media_category', 'category_key': 'news'},
+         'isFolder': True},
+        {'label': 'Respected Comrade [B]Kim Jong Un[/B] Revolutionary Activities',
+         'icon':  '',
+         'params': {'action': 'media_category', 'category_key': 'activities'},
+         'isFolder': True},
+        {'label': 'Society and Culture',
+         'icon':  '',
+         'params': {'action': 'media_category', 'category_key': 'societyAndCulture'},
          'isFolder': True},
         {'label': 'Search',
          'icon':  utils.search_icon(),
@@ -395,14 +399,13 @@ def _render_results(data, next_params, prev_params=None):
     total_pages = max(1, -(-count // 20))
 
     for item in results:
-        token       = item.get('friendly_token', '')
         title       = item.get('title', 'Untitled')
-        thumb       = item.get('thumbnail_url', '')
+        thumb       = item.get('thumb') or item.get('thumbnail_url', '')
         if thumb and thumb.startswith('/'):
-            thumb = 'https://vod.koryofront.org' + thumb
+            thumb = api.MEDIA_BASE + thumb
         duration    = item.get('duration', 0)
         views       = item.get('views', 0)
-        add_date    = item.get('add_date', '')[:10]
+        add_date    = (item.get('add_date') or item.get('date') or '')[:10]
         description = item.get('description', '')
         plot        = description if description else 'Views: {}  |  Added: {}'.format(views, add_date)
 
@@ -410,8 +413,15 @@ def _render_results(data, next_params, prev_params=None):
         set_video_info(li, title=title, plot=plot, duration=duration, date=add_date)
         li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': thumb})
         li.setProperty('IsPlayable', 'true')
-        xbmcplugin.addDirectoryItem(
-            HANDLE, build_url({'action': 'play', 'token': token}), li, isFolder=False)
+
+        stream_url = item.get('url') or item.get('stream_url') or item.get('download') or ''
+        if stream_url:
+            params = {'action': 'play_media_item', 'url': stream_url, 'title': title, 'plot': plot}
+        else:
+            token = item.get('friendly_token', '')
+            params = {'action': 'play', 'token': token}
+
+        xbmcplugin.addDirectoryItem(HANDLE, build_url(params), li, isFolder=False)
 
     cur_page = int(next_params.get('page', 2)) - 1
 
@@ -447,6 +457,76 @@ def listing(page=1, ordering='-add_date'):
     prev_params = {'action': 'listing', 'page': page - 1, 'ordering': ordering} if page > 1 else None
     _render_results(data, {'action': 'listing', 'page': page + 1, 'ordering': ordering},
                     prev_params=prev_params)
+
+
+def media_categories():
+    dialog = xbmcgui.DialogProgress()
+    dialog.create(ADDON_NAME, 'Loading categories...')
+    try:
+        data = api.get_media_list(page=1, ordering='-add_date')
+    except Exception as e:
+        dialog.close()
+        xbmcgui.Dialog().notification(ADDON_NAME, 'Error: {}'.format(str(e)), xbmcgui.NOTIFICATION_ERROR)
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+    dialog.close()
+
+    categories = data.get('categories', [])
+    if not categories:
+        xbmcgui.Dialog().ok(ADDON_NAME, 'No categories found.')
+        xbmcplugin.endOfDirectory(HANDLE)
+        return
+
+    for category in categories:
+        title = category.get('title', 'Untitled')
+        label = title.replace('Kim Jong Un', '[B]Kim Jong Un[/B]')
+        li = xbmcgui.ListItem(label=label)
+        set_video_info(li, title=title)
+        xbmcplugin.addDirectoryItem(
+            HANDLE,
+            build_url({'action': 'media_category', 'category_key': category.get('key', '')}),
+            li,
+            isFolder=True)
+
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_NONE)
+    xbmcplugin.endOfDirectory(HANDLE)
+
+
+def media_category(category_key):
+    dialog = xbmcgui.DialogProgress()
+    dialog.create(ADDON_NAME, 'Loading videos...')
+    try:
+        data = api.get_media_list(page=1, ordering='-add_date')
+    except Exception as e:
+        dialog.close()
+        xbmcgui.Dialog().notification(ADDON_NAME, 'Error: {}'.format(str(e)), xbmcgui.NOTIFICATION_ERROR)
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+    dialog.close()
+
+    categories = data.get('categories', [])
+    category = next((c for c in categories if c.get('key') == category_key), None)
+    if not category:
+        xbmcgui.Dialog().ok(ADDON_NAME, 'Category not found.')
+        xbmcplugin.endOfDirectory(HANDLE)
+        return
+
+    for item in category.get('items', []):
+        title = item.get('title', 'Untitled')
+        thumb = item.get('thumb') or ''
+        li = xbmcgui.ListItem(label=title)
+        set_video_info(li, title=title, plot=item.get('date', ''))
+        if thumb:
+            li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': thumb})
+        li.setProperty('IsPlayable', 'true')
+        xbmcplugin.addDirectoryItem(
+            HANDLE,
+            build_url({'action': 'play_media_item', 'url': item.get('url', ''), 'title': title, 'plot': item.get('date', '')}),
+            li,
+            isFolder=False)
+
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_NONE)
+    xbmcplugin.endOfDirectory(HANDLE)
 
 
 def report(page=1):
@@ -503,6 +583,19 @@ def _do_search(query, page=1):
 
 def search_results(query, page=1):
     _do_search(query, page=page)
+
+
+def play_media_item(url, title='Koryo TV', plot=''):
+    if not url:
+        xbmcgui.Dialog().ok(ADDON_NAME, 'No video URL was provided.')
+        return
+
+    li = xbmcgui.ListItem(label=title, path=url)
+    set_video_info(li, title=title, plot=plot)
+    li.setMimeType('video/mp4')
+    li.setContentLookup(False)
+    li.setProperty('IsPlayable', 'true')
+    xbmcplugin.setResolvedUrl(HANDLE, True, listitem=li)
 
 
 def play(token):
@@ -672,6 +765,7 @@ elif action == 'search_results': search_results(query=PARAMS.get('query', ''), p
 elif action == 'report':         report(page=PARAMS.get('page', 1))
 elif action == 'donate':         donate()
 elif action == 'play':           play(PARAMS.get('token', ''))
+elif action == 'play_media_item': play_media_item(PARAMS.get('url', ''), PARAMS.get('title', 'Koryo TV'), PARAMS.get('plot', ''))
 elif action == 'server_test':    server_test()
 elif action == 'iptv_channels':  iptv_channels()
 elif action == 'iptv_epg':       iptv_epg()

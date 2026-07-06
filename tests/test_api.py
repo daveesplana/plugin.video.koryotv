@@ -205,13 +205,50 @@ class LiveChannelIdTests(unittest.TestCase):
         epg = api.parse_json_epg(payload, wanted_channel_ids={'kctv'})
         self.assertIn('kctv', epg)
         self.assertEqual(epg['kctv'][0]['title'], 'Morning News')
-        self.assertEqual(epg['kctv'][0]['start'], '2026-07-04T09:13:00')
-        self.assertEqual(epg['kctv'][0]['stop'], '2026-07-04T09:40:00')
+        self.assertEqual(epg['kctv'][0]['start'], '2026-07-04T09:13:00+09:00')
+        self.assertEqual(epg['kctv'][0]['stop'], '2026-07-04T09:40:00+09:00')
         self.assertEqual(epg['kctv'][0]['genre'], 'News')
 
     def test_default_epg_url_uses_the_current_date(self):
         url = api.build_default_epg_url('2026-07-05')
         self.assertIn('date=2026-07-05', url)
+
+    def test_thumb_url_uses_the_kctv_thumbnail_endpoint(self):
+        thumb = api.build_thumb_url('/recordings/News/8pm%20News%20%5B2026-07-04%5D.mp4', timestamp=5)
+        self.assertIn('/api/kctv/thumb?', thumb)
+        self.assertIn('path=%2Frecordings%2FNews%2F8pm%2520News%2520%255B2026-07-04%255D.mp4', thumb)
+        self.assertIn('t=5', thumb)
+
+    def test_kctv_media_list_payload_is_parsed_into_categories(self):
+        payload = {
+            'newsTitle': 'News',
+            'activitiesTitle': "Respected Comrade Kim Jong Un's Revolutionary Activities",
+            'societyAndCultureTitle': 'Society and Culture',
+            'news': [{
+                'title': '8pm News [2026/07/04]',
+                'date': '2026-07-04',
+                'url': '/recordings/News/8pm.mp4',
+            }],
+            'activities': [{
+                'title': 'Activity Clip',
+                'date': '2026-07-03',
+                'url': '/recordings/Activities/clip.mp4',
+            }],
+            'societyAndCulture': [{
+                'title': 'Culture Clip',
+                'date': '2026-07-02',
+                'url': '/recordings/Society/clip.mp4',
+            }],
+        }
+
+        categories = api.parse_kctv_media_list(payload)
+        self.assertEqual(categories[0]['key'], 'news')
+        self.assertEqual(categories[0]['title'], 'News')
+        self.assertEqual(categories[1]['title'], "Respected Comrade Kim Jong Un's Revolutionary Activities")
+        self.assertEqual(categories[2]['key'], 'societyAndCulture')
+        self.assertEqual(categories[2]['title'], 'Society and Culture')
+        self.assertEqual(categories[0]['items'][0]['title'], '8pm News [2026/07/04]')
+        self.assertEqual(categories[0]['items'][0]['url'], 'https://kctv.koryofront.org/recordings/News/8pm.mp4')
 
 
 if __name__ == '__main__':

@@ -18,8 +18,9 @@ except ImportError:
     from urllib import urlencode
     import httplib as http_client
 
-BASE       = 'https://old.vod.koryo.tv'
-API_BASE   = BASE + '/api/v1'
+BASE       = 'https://koryofront.org'
+MEDIA_BASE = 'https://kctv.koryofront.org'
+API_BASE   = BASE + '/api/kctv'
 
 EDGE_HOSTS = [
     'edge-mcu.koryo.tv',
@@ -153,10 +154,105 @@ def _get(url, extra_headers=None):
     except URLError as e:
         raise Exception('Network error: {}'.format(str(e.reason)))
 
+def build_thumb_url(media_path, timestamp=None):
+    if not media_path:
+        return ''
+
+    if not isinstance(media_path, str):
+        media_path = str(media_path)
+
+    if media_path.startswith('http'):
+        return media_path
+
+    if media_path.startswith('/'):
+        media_path = media_path[1:]
+
+    params = {'path': '/' + media_path}
+    if timestamp is None:
+        timestamp = 1
+    params['t'] = timestamp
+
+    return '{}/thumb?{}'.format(API_BASE, urlencode(params))
+
+
+def parse_kctv_media_list(payload):
+    if not isinstance(payload, dict):
+        return []
+
+    def _normalize_items(items):
+        if not isinstance(items, list):
+            return []
+
+        normalized = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            title = item.get('title') or item.get('filename') or 'Untitled'
+            url = item.get('url') or item.get('download') or ''
+            if url and not url.startswith('http'):
+                if url.startswith('/'):
+                    url = MEDIA_BASE + url
+                else:
+                    url = MEDIA_BASE + '/' + url
+
+            thumb = ''
+            media_path = item.get('url') or item.get('download') or ''
+            if media_path:
+                thumb = build_thumb_url(media_path)
+
+            normalized.append({
+                'title': str(title).strip(),
+                'date': str(item.get('date') or '').strip(),
+                'url': str(url).strip(),
+                'download': str(item.get('download') or '').strip(),
+                'category': item.get('category') or '',
+                'originalTitle': str(item.get('originalTitle') or '').strip(),
+                'thumb': thumb,
+            })
+
+        return normalized
+
+    category_specs = [
+        ('news', 'newsTitle', 'news'),
+        ('activities', 'activitiesTitle', 'activities'),
+        ('societyAndCulture', 'societyAndCultureTitle', 'societyAndCulture'),
+    ]
+
+    categories = []
+    for key, title_key, items_key in category_specs:
+        title = payload.get(title_key) or ''
+        if not title:
+            title = {
+                'news': 'News',
+                'activities': "Respected Comrade Kim Jong Un's Revolutionary Activities",
+                'societyAndCulture': 'Society and Culture',
+            }.get(key, key)
+        items = _normalize_items(payload.get(items_key))
+        if title or items:
+            categories.append({'key': key, 'title': str(title).strip(), 'items': items})
+
+    return categories
+
+
 def get_media_list(page=1, ordering='-add_date'):
-    params = {'page': int(page), 'ordering': ordering}
-    url = '{}/media?{}'.format(API_BASE, urlencode(params))
-    return _get(url)
+    url = '{}/media-list'.format(API_BASE)
+    payload = _get(url)
+    categories = parse_kctv_media_list(payload)
+    results = []
+    for category in categories:
+        for item in category.get('items', []):
+            entry = dict(item)
+            entry['category'] = category.get('title', '')
+            results.append(entry)
+
+    return {
+        'categories': categories,
+        'results': results,
+        'count': len(results),
+        'next': None,
+        'page': int(page),
+    }
 
 def search_media(query, page=1):
     params = {'q': query, 'page': int(page)}
@@ -513,6 +609,15 @@ def get_live_stream_url(channel_id, progress_callback=None, forced_host=None):
     raise Exception('All live servers failed: {}'.format('; '.join(errors)))
 
 def resolve_stream_url(media):
+    if not media:
+        return None
+
+    direct_url = media.get('url') or media.get('stream_url') or media.get('download') or ''
+    if direct_url:
+        if direct_url.startswith('/'):
+            direct_url = MEDIA_BASE + direct_url
+        return direct_url
+
     base = BASE
     encodings = media.get('encodings_info', {})
 
@@ -660,6 +765,9 @@ def _normalize_epg_datetime(value, base_date=None):
     if len(value) == 16 and ':' in value:
         value = '{}:00'.format(value)
 
+    if 'T' in value and '+' not in value and '-' not in value[10:]:
+        value = '{}+09:00'.format(value)
+
     return value
 
 
@@ -692,9 +800,9 @@ def parse_json_epg(payload, wanted_channel_ids=None):
         channel_id = prog.get('channel') or prog.get('channel_id') or prog.get('channelId') or default_channel_id
         if not channel_id:
             continue
-        channel_key = str(channel_id).strip().lower()
+        channel_key = _normalize_channel_id(channel_id)
         if wanted_channel_ids is not None:
-            if channel_key not in wanted_channel_ids and channel_id not in wanted_channel_ids:
+            if channel_key not in wanted_channel_ids and str(channel_id).strip() not in wanted_channel_ids:
                 continue
 
         start_iso = prog.get('start') or prog.get('start_time') or prog.get('startTime')
@@ -724,7 +832,8 @@ def parse_json_epg(payload, wanted_channel_ids=None):
         if genre:
             entry['genre'] = str(genre).strip()
 
-        epg.setdefault(channel_key, []).append(entry)
+        for alias in set(filter(None, [channel_key, str(channel_id).strip()])):
+            epg.setdefault(alias, []).append(entry)
 
     return epg
 
