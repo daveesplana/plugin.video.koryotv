@@ -28,7 +28,6 @@ EDGE_HOSTS = [
     'koryo.tv',
     'edge-osk.koryo.tv',
     'edge-vvo.koryo.tv',
-    'edge-jhb.koryo.tv',
 ]
 
 SETTINGS_SERVER_MAP = {
@@ -37,7 +36,6 @@ SETTINGS_SERVER_MAP = {
     3: 'edge-mcu.koryo.tv',
     4: 'edge-osk.koryo.tv',
     5: 'edge-vvo.koryo.tv',
-    6: 'edge-jhb.koryo.tv',
 }
 
 SERVER_LABELS = {
@@ -46,11 +44,10 @@ SERVER_LABELS = {
     'edge-mcu.koryo.tv': 'Macau (MCU)',
     'edge-osk.koryo.tv': 'Japan (OSK)',
     'edge-vvo.koryo.tv': 'Russia (VVO)',
-    'edge-jhb.koryo.tv': 'South Africa (JHB)',
 }
+
 EDGE_HOST  = EDGE_HOSTS[0]
 EDGE       = 'https://' + EDGE_HOST
-
 LIVE_CHANNELS = [
     {
         'id':   'KCTV',

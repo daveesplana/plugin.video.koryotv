@@ -1,7 +1,6 @@
 import json
 import socket
 
-
 class IPTVManager:
     def __init__(self, port):
         self.port = int(port)
