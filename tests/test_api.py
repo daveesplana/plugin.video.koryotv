@@ -264,8 +264,8 @@ class LiveChannelIdTests(unittest.TestCase):
         }
 
         categories = api.parse_kctv_media_list(payload)
-        self.assertEqual(categories[0]['key'], 'news')
-        self.assertEqual(categories[0]['title'], 'News')
+        self.assertEqual(categories[0]['key'], 'report')
+        self.assertEqual(categories[0]['title'], 'Report')
         self.assertEqual(categories[1]['title'], "Respected Comrade Kim Jong Un's Revolutionary Activities")
         self.assertEqual(categories[2]['key'], 'societyAndCulture')
         self.assertEqual(categories[2]['title'], 'Society and Culture')

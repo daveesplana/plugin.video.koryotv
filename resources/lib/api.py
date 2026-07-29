@@ -211,7 +211,7 @@ def parse_kctv_media_list(payload):
         return normalized
 
     category_specs = [
-        ('news', 'newsTitle', 'news'),
+        ('report', 'reportTitle', 'report'),
         ('activities', 'activitiesTitle', 'activities'),
         ('societyAndCulture', 'societyAndCultureTitle', 'societyAndCulture'),
     ]
@@ -221,7 +221,7 @@ def parse_kctv_media_list(payload):
         title = payload.get(title_key) or ''
         if not title:
             title = {
-                'news': 'News',
+                'report': 'Report',
                 'activities': "Respected Comrade Kim Jong Un's Revolutionary Activities",
                 'societyAndCulture': 'Society and Culture',
             }.get(key, key)
