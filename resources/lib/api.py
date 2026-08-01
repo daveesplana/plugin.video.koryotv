@@ -211,20 +211,24 @@ def parse_kctv_media_list(payload):
         return normalized
 
     category_specs = [
-        ('report', 'reportTitle', 'report'),
-        ('activities', 'activitiesTitle', 'activities'),
-        ('societyAndCulture', 'societyAndCultureTitle', 'societyAndCulture'),
+        ('report', 'news', 'news'),
+        ('activities', 'activities', 'activities'),
+        ('societyAndCulture', 'societyAndCulture', 'societyAndCulture'),
     ]
 
     categories = []
     for key, title_key, items_key in category_specs:
-        title = payload.get(title_key) or ''
-        if not title:
-            title = {
-                'report': 'Report',
-                'activities': "Respected Comrade Kim Jong Un's Revolutionary Activities",
-                'societyAndCulture': 'Society and Culture',
-            }.get(key, key)
+        title = {
+            'report': 'Report',
+            'activities': "Respected Comrade Kim Jong Un's Revolutionary Activities",
+            'societyAndCulture': 'Society and Culture',
+        }.get(key, key)
+
+        if title_key == 'activities' and payload.get('activitiesTitle'):
+            title = payload.get('activitiesTitle')
+        elif title_key == 'societyAndCulture' and payload.get('societyAndCultureTitle'):
+            title = payload.get('societyAndCultureTitle')
+
         items = _normalize_items(payload.get(items_key))
         if title or items:
             categories.append({'key': key, 'title': str(title).strip(), 'items': items})

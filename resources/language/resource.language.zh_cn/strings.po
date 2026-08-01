@@ -54,3 +54,67 @@ msgstr "俄罗斯服务器 (VVO)"
 msgctxt "#30016"
 msgid "South Africa Server (JHB)"
 msgstr "南非服务器 (JHB)"
+
+msgctxt "#30030"
+msgid "Live Broadcasts"
+msgstr "直播"
+
+msgctxt "#30031"
+msgid "Report"
+msgstr "报道"
+
+msgctxt "#30032"
+msgid "Respected Comrade Kim Jong Un Revolutionary Activities"
+msgstr "尊敬的同志金正恩革命活动"
+
+msgctxt "#30033"
+msgid "Society and Culture"
+msgstr "社会与文化"
+
+msgctxt "#30034"
+msgid "Search"
+msgstr "搜索"
+
+msgctxt "#30035"
+msgid "Support Koryo TV"
+msgstr "支持高丽电视"
+
+msgctxt "#30040"
+msgid "Korean Central Television"
+msgstr "朝鲜中央电视台"
+
+msgctxt "#30041"
+msgid "Korean Central Broadcasting Station"
+msgstr "朝鲜中央广播电台"
+
+msgctxt "#30042"
+msgid "Voice of Korea"
+msgstr "朝鲜之声"
+
+msgctxt "#30050"
+msgid "Monday"
+msgstr "星期一"
+
+msgctxt "#30051"
+msgid "Tuesday"
+msgstr "星期二"
+
+msgctxt "#30052"
+msgid "Wednesday"
+msgstr "星期三"
+
+msgctxt "#30053"
+msgid "Thursday"
+msgstr "星期四"
+
+msgctxt "#30054"
+msgid "Friday"
+msgstr "星期五"
+
+msgctxt "#30055"
+msgid "Saturday"
+msgstr "星期六"
+
+msgctxt "#30056"
+msgid "Sunday"
+msgstr "星期日"

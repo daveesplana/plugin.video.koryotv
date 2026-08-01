@@ -13,128 +13,128 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Language: en_US\n"
+"Language: ko_KR\n"
 
 msgctxt "#30000"
 msgid "Koryo TV"
-msgstr ""
+msgstr "고려 TV"
 
 msgctxt "#30001"
 msgid "General"
-msgstr ""
+msgstr "일반"
 
 msgctxt "#30002"
 msgid "Select Server"
-msgstr ""
+msgstr "서버 선택"
 
 msgctxt "#30010"
 msgid "Automatic"
-msgstr ""
+msgstr "자동"
 
 msgctxt "#30011"
 msgid "Kosovo Server (PRS)"
-msgstr ""
+msgstr "코소보 서버 (PRS)"
 
 msgctxt "#30012"
 msgid "Canada Server (MTR)"
-msgstr ""
+msgstr "캐나다 서버 (MTR)"
 
 msgctxt "#30013"
 msgid "Macau Server (MCU)"
-msgstr ""
+msgstr "마카오 서버 (MCU)"
 
 msgctxt "#30014"
 msgid "Japan Server (OSK)"
-msgstr ""
+msgstr "일본 서버 (OSK)"
 
 msgctxt "#30015"
 msgid "Russia Server (VVO)"
-msgstr ""
+msgstr "러시아 서버 (VVO)"
 
 msgctxt "#30016"
 msgid "South Africa Server (JHB)"
-msgstr ""
+msgstr "남아프리카 서버 (JHB)"
 
 msgctxt "#30020"
 msgid "Live TV Integration"
-msgstr ""
+msgstr "실시간 TV 연동"
 
 msgctxt "#30021"
 msgid "Enable IPTV Manager / IPTV Merge integration"
-msgstr ""
+msgstr "IPTV Manager / IPTV Merge 연동 활성화"
 
 msgctxt "#30022"
 msgid "Lets SlyGuy IPTV Merge (or any IPTV Manager-compatible add-on) automatically pull Koryo TV's live channels and EPG into Kodi PVR."
-msgstr ""
+msgstr "SlyGuy IPTV Merge(또는 IPTV Manager 호환 애드온)가 Koryo TV의 실시간 채널과 EPG를 Kodi PVR로 자동 가져오도록 합니다."
 
 msgctxt "#30023"
 msgid "Enable EPG"
-msgstr ""
+msgstr "EPG 활성화"
 
 msgctxt "#30024"
 msgid "Enable the built-in EPG feed for Korean Central Television (KCTV)."
-msgstr ""
+msgstr "한국중앙텔레비전(KCTV)의 내장 EPG 피드를 활성화합니다."
 
 msgctxt "#30030"
 msgid "Live Broadcasts"
-msgstr ""
+msgstr "실시간 방송"
 
 msgctxt "#30031"
 msgid "Report"
-msgstr ""
+msgstr "보도"
 
 msgctxt "#30032"
 msgid "Respected Comrade Kim Jong Un Revolutionary Activities"
-msgstr ""
+msgstr "경애하는 김정은동지의 혁명활동"
 
 msgctxt "#30033"
 msgid "Society and Culture"
-msgstr ""
+msgstr "사회와 문화"
 
 msgctxt "#30034"
 msgid "Search"
-msgstr ""
+msgstr "검색"
 
 msgctxt "#30035"
 msgid "Support Koryo TV"
-msgstr ""
+msgstr "고려TV 지원"
 
 msgctxt "#30040"
 msgid "Korean Central Television"
-msgstr ""
-
-msgctxt "#30050"
-msgid "Monday"
-msgstr ""
-
-msgctxt "#30051"
-msgid "Tuesday"
-msgstr ""
-
-msgctxt "#30052"
-msgid "Wednesday"
-msgstr ""
-
-msgctxt "#30053"
-msgid "Thursday"
-msgstr ""
-
-msgctxt "#30054"
-msgid "Friday"
-msgstr ""
-
-msgctxt "#30055"
-msgid "Saturday"
-msgstr ""
-
-msgctxt "#30056"
-msgid "Sunday"
-msgstr ""
+msgstr "조선중앙텔레비죤"
 
 msgctxt "#30041"
 msgid "Korean Central Broadcasting Station"
-msgstr ""
+msgstr "조선중앙방송"
 
 msgctxt "#30042"
 msgid "Voice of Korea"
-msgstr ""
+msgstr "조선의 소리"
+
+msgctxt "#30050"
+msgid "Monday"
+msgstr "월요일"
+
+msgctxt "#30051"
+msgid "Tuesday"
+msgstr "화요일"
+
+msgctxt "#30052"
+msgid "Wednesday"
+msgstr "수요일"
+
+msgctxt "#30053"
+msgid "Thursday"
+msgstr "목요일"
+
+msgctxt "#30054"
+msgid "Friday"
+msgstr "금요일"
+
+msgctxt "#30055"
+msgid "Saturday"
+msgstr "토요일"
+
+msgctxt "#30056"
+msgid "Sunday"
+msgstr "일요일"

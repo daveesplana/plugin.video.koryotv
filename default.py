@@ -1,6 +1,7 @@
 import re
 import threading
 import sys
+import datetime
 import xbmc
 import xbmcgui
 import xbmcplugin
@@ -14,10 +15,12 @@ from resources.lib import api, utils, iptvmanager
 
 ADDON      = xbmcaddon.Addon()
 ADDON_ID   = ADDON.getAddonInfo('id')
-ADDON_NAME = ADDON.getAddonInfo('name')
-BASE_URL   = sys.argv[0]
-HANDLE     = int(sys.argv[1])
-PARAMS     = dict(parse_qsl(sys.argv[2][1:]))
+ADDON_NAME = ADDON.getLocalizedString(30000) or ADDON.getAddonInfo('name')
+BASE_URL   = sys.argv[0] if sys.argv else ''
+HANDLE     = int(sys.argv[1]) if len(sys.argv) > 1 and str(sys.argv[1]).lstrip('-').isdigit() else -1
+PARAMS     = {}
+if len(sys.argv) > 2 and sys.argv[2].startswith('?'):
+    PARAMS = dict(parse_qsl(sys.argv[2][1:]))
 
 REPORT_PREFIX = 'Korean Central Television 8 PM Report'
 REPORT_QUERY  = REPORT_PREFIX
@@ -245,6 +248,83 @@ def set_video_info(li, title='', plot='', duration=0, date=''):
         })
 
 
+def _bold_name_mentions(text):
+    if not isinstance(text, str):
+        return text
+
+    for name in ('Kim Jong Un', '김정은', '金正恩'):
+        text = text.replace(name, '[B]{}[/B]'.format(name))
+
+    return text
+
+
+def _format_epg_time(start_iso):
+    if not isinstance(start_iso, str):
+        return ''
+
+    start_text = start_iso.strip()
+    if not start_text:
+        return ''
+
+    if 'T' in start_text:
+        start_text = start_text.split('T', 1)[1]
+    if '+' in start_text:
+        start_text = start_text.split('+', 1)[0]
+    if 'Z' in start_text:
+        start_text = start_text[:-1]
+    if len(start_text) >= 5 and start_text[2] == ':':
+        return start_text[:5]
+    return start_text
+
+
+def _default_report_label():
+    return ADDON.getLocalizedString(30031)
+
+
+def _report_result_title(item):
+    title = item.get('title', '')
+    date_value = (item.get('date') or item.get('add_date') or '')[:10]
+    if date_value:
+        return '{} {}'.format(ADDON.getLocalizedString(30031), date_value)
+    return title or ADDON.getLocalizedString(30031)
+
+
+def _localized_weekday_label(weekday_index):
+    weekday_ids = {
+        1: 30050,
+        2: 30051,
+        3: 30052,
+        4: 30053,
+        5: 30054,
+        6: 30055,
+        7: 30056,
+    }
+    return ADDON.getLocalizedString(weekday_ids.get(weekday_index, 30050))
+
+
+def _live_player_title(channel_name):
+    today = datetime.date.today()
+    weekday = _localized_weekday_label(today.isoweekday())
+    return '{} : {} ({})'.format(channel_name, today.isoformat(), weekday)
+
+
+def _build_live_channel_plot(channel_key):
+    try:
+        epg = api.get_default_iptv_epg(wanted_channel_ids={channel_key})
+    except Exception:
+        return ''
+
+    entries = epg.get(channel_key, []) if isinstance(epg, dict) else []
+    lines = []
+    for entry in entries[:3]:
+        start = _format_epg_time(entry.get('start', ''))
+        title = entry.get('title', '')
+        if start and title:
+            lines.append('[{}]: {}'.format(start, title))
+
+    return '\n'.join(lines)
+
+
 def _channel_icon(ch):
     cid = ch.get('id', '')
     try:
@@ -266,34 +346,40 @@ def _channel_icon(ch):
 
 def main_menu():
     entries = [
-        {'label': 'Live Broadcasts',
+        {'label_id': 30030,
          'icon':  utils.live_icon(),
          'params': {'action': 'live'},
          'isFolder': True},
-        {'label': 'Report',
+        {'label_id': 30031,
          'icon':  utils.report_icon(),
          'params': {'action': 'media_category', 'category_key': 'report'},
          'isFolder': True},
-        {'label': 'Respected Comrade [B]Kim Jong Un[/B] Revolutionary Activities',
+        {'label_id': 30032,
          'icon':  '',
          'params': {'action': 'media_category', 'category_key': 'activities'},
          'isFolder': True},
-        {'label': 'Society and Culture',
+        {'label_id': 30033,
          'icon':  '',
          'params': {'action': 'media_category', 'category_key': 'societyAndCulture'},
          'isFolder': True},
-        {'label': 'Search',
+        {'label_id': 30034,
          'icon':  utils.search_icon(),
          'params': {'action': 'search'},
          'isFolder': True},
-        {'label': '[COLOR gold]Support Koryo TV[/COLOR]',
+        {'label_id': 30035,
          'icon':  utils.addon2_icon(),
          'params': {'action': 'donate'},
          'isFolder': True},
     ]
     for e in entries:
-        li = xbmcgui.ListItem(label=e['label'])
-        set_video_info(li, title=e['label'])
+        label = ADDON.getLocalizedString(e['label_id'])
+        if e['label_id'] == 30031:
+            label = _default_report_label()
+        label = _bold_name_mentions(label)
+        if e['label_id'] == 30035:
+            label = '[COLOR gold]{}[/COLOR]'.format(label)
+        li = xbmcgui.ListItem(label=label)
+        set_video_info(li, title=label)
         li.setArt({'icon': e['icon'], 'thumb': e['icon']})
         xbmcplugin.addDirectoryItem(HANDLE, build_url(e['params']), li, isFolder=e['isFolder'])
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_NONE)
@@ -301,13 +387,23 @@ def main_menu():
 
 
 def live():
+    channel_label_ids = {
+        'KCTV': 30040,
+        'KCBS': 30041,
+        'VOK': 30042,
+    }
+
     for ch in api.LIVE_CHANNELS:
-        li = xbmcgui.ListItem(label=ch['name'])
-        set_video_info(li, title=ch['name'], plot='Live stream of {}'.format(ch['name']))
+        channel_key = api._normalize_channel_id(ch['id'])
+        label = ADDON.getLocalizedString(channel_label_ids.get(ch['id'], 30040))
+        label = _bold_name_mentions(label)
+        plot = _build_live_channel_plot(channel_key)
+        li = xbmcgui.ListItem(label=label)
+        set_video_info(li, title=label, plot=plot or label)
         icon = _channel_icon(ch)
         li.setArt({'icon': icon, 'thumb': icon})
         li.setProperty('IsPlayable', 'true')
-        url = build_url({'action': 'play_live', 'channel_id': ch['id'], 'name': ch['name']})
+        url = build_url({'action': 'play_live', 'channel_id': ch['id'], 'name': label})
         xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=False)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_NONE)
     xbmcplugin.endOfDirectory(HANDLE)
@@ -328,15 +424,14 @@ def play_live(channel_id, name):
         server_mode = int(ADDON.getSetting('server_mode') or '0')
         forced_host = api.SETTINGS_SERVER_MAP.get(server_mode)
 
-        dialog = xbmcgui.DialogProgress()
-        if forced_host:
-            label = api.SERVER_LABELS.get(forced_host, forced_host)
-            dialog.create(ADDON_NAME, 'Connecting to {}...'.format(label))
-        else:
+        dialog = None
+        if not forced_host:
+            dialog = xbmcgui.DialogProgress()
             dialog.create(ADDON_NAME, 'Finding best server...')
 
         def _progress(percent, message):
-            dialog.update(percent, message)
+            if dialog is not None:
+                dialog.update(percent, message)
 
         try:
             stream_url, cookie_str, edge_host, playlist_id = api.get_live_stream_url(
@@ -347,12 +442,14 @@ def play_live(channel_id, name):
             xbmc.log('[KoryoTV] Resolved stream: {} host={} playlist={}'.format(
                 stream_url, edge_host, playlist_id), xbmc.LOGINFO)
         except Exception as e:
-            dialog.close()
+            if dialog is not None:
+                dialog.close()
             xbmc.log('[KoryoTV] Live stream error: {}'.format(e), xbmc.LOGERROR)
             xbmcgui.Dialog().ok(ADDON_NAME, 'Live stream error:\n{}'.format(str(e)))
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
             return
-        dialog.close()
+        if dialog is not None:
+            dialog.close()
 
     stream_headers = {
         'User-Agent':    api.UA,
@@ -372,7 +469,8 @@ def play_live(channel_id, name):
 
     li = xbmcgui.ListItem(label=name)
     li.setPath(local_url)
-    set_video_info(li, title=name, plot='Live: {}'.format(name))
+    player_title = _live_player_title(name)
+    set_video_info(li, title=player_title, plot=player_title)
     li.setMimeType('application/vnd.apple.mpegurl')
     li.setContentLookup(False)
     li.setProperty('IsPlayable', 'true')
@@ -409,14 +507,20 @@ def _render_results(data, next_params, prev_params=None):
         description = item.get('description', '')
         plot        = description if description else 'Views: {}  |  Added: {}'.format(views, add_date)
 
-        li = xbmcgui.ListItem(label=title)
-        set_video_info(li, title=title, plot=plot, duration=duration, date=add_date)
+        display_title = title
+        if not title or title == 'Untitled':
+            display_title = _report_result_title(item)
+        elif _report_result_title(item) != title:
+            display_title = _report_result_title(item)
+
+        li = xbmcgui.ListItem(label=display_title)
+        set_video_info(li, title=display_title, plot=plot, duration=duration, date=add_date)
         li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': thumb})
         li.setProperty('IsPlayable', 'true')
 
         stream_url = item.get('url') or item.get('stream_url') or item.get('download') or ''
         if stream_url:
-            params = {'action': 'play_media_item', 'url': stream_url, 'title': title, 'plot': plot}
+            params = {'action': 'play_media_item', 'url': stream_url, 'title': display_title, 'plot': plot}
         else:
             token = item.get('friendly_token', '')
             params = {'action': 'play', 'token': token}
@@ -479,7 +583,7 @@ def media_categories():
 
     for category in categories:
         title = category.get('title', 'Untitled')
-        label = title.replace('Kim Jong Un', '[B]Kim Jong Un[/B]')
+        label = _bold_name_mentions(title)
         li = xbmcgui.ListItem(label=label)
         set_video_info(li, title=title)
         xbmcplugin.addDirectoryItem(
@@ -513,15 +617,17 @@ def media_category(category_key):
 
     for item in category.get('items', []):
         title = item.get('title', 'Untitled')
+        display_title = _report_result_title(item) if category_key == 'report' else title
+        display_title = _bold_name_mentions(display_title)
         thumb = item.get('thumb') or ''
-        li = xbmcgui.ListItem(label=title)
-        set_video_info(li, title=title, plot=item.get('date', ''))
+        li = xbmcgui.ListItem(label=display_title)
+        set_video_info(li, title=display_title, plot=item.get('date', ''))
         if thumb:
             li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': thumb})
         li.setProperty('IsPlayable', 'true')
         xbmcplugin.addDirectoryItem(
             HANDLE,
-            build_url({'action': 'play_media_item', 'url': item.get('url', ''), 'title': title, 'plot': item.get('date', '')}),
+            build_url({'action': 'play_media_item', 'url': item.get('url', ''), 'title': display_title, 'plot': item.get('date', '')}),
             li,
             isFolder=False)
 
@@ -544,6 +650,8 @@ def report(page=1):
     if data and 'results' in data:
         data['results'] = [i for i in data['results']
                            if i.get('title', '').startswith(REPORT_PREFIX)]
+        for item in data['results']:
+            item['title'] = _report_result_title(item)
     prev_params = {'action': 'report', 'page': page - 1} if page > 1 else None
     _render_results(data, {'action': 'report', 'page': page + 1}, prev_params=prev_params)
 
@@ -590,8 +698,12 @@ def play_media_item(url, title='Koryo TV', plot=''):
         xbmcgui.Dialog().ok(ADDON_NAME, 'No video URL was provided.')
         return
 
-    li = xbmcgui.ListItem(label=title, path=url)
-    set_video_info(li, title=title, plot=plot)
+    report_title = _report_result_title({'title': title, 'date': plot})
+    resolved_title = report_title if plot else title
+    resolved_title = _bold_name_mentions(resolved_title)
+
+    li = xbmcgui.ListItem(label=resolved_title, path=url)
+    set_video_info(li, title=resolved_title, plot=plot)
     li.setMimeType('video/mp4')
     li.setContentLookup(False)
     li.setProperty('IsPlayable', 'true')
@@ -645,6 +757,7 @@ def server_test():
     index_to_mode = [0]
 
     host_to_mode = {v: k for k, v in api.SETTINGS_SERVER_MAP.items()}
+    current_mode = int(ADDON.getSetting('server_mode') or '0')
 
     for r in results:
         host   = r['host']
@@ -652,18 +765,21 @@ def server_test():
         status = r['status']
         icon   = STATUS_ICON.get(status, '●')
 
-        if r['latency_ms'] is None:
-            detail = '[COLOR red]Offline[/COLOR]'
-        elif r['speed_mbps'] and r['speed_mbps'] > 0:
-            detail = '{}ms  •  {:.1f} MB/s'.format(r['latency_ms'], r['speed_mbps'])
-        else:
-            detail = '{}ms'.format(r['latency_ms'])
+        if current_mode == 0:
+            if r['latency_ms'] is None:
+                detail = '[COLOR red]Offline[/COLOR]'
+            elif r['speed_mbps'] and r['speed_mbps'] > 0:
+                detail = '{}ms  •  {:.1f} MB/s'.format(r['latency_ms'], r['speed_mbps'])
+            else:
+                detail = '{}ms'.format(r['latency_ms'])
 
-        line = '{} {}  [COLOR grey]{}[/COLOR]'.format(icon, label, detail)
+            line = '{} {}  [COLOR grey]{}[/COLOR]'.format(icon, label, detail)
+        else:
+            line = label
+
         select_labels.append(line)
         index_to_mode.append(host_to_mode.get(host, 0))
 
-    current_mode = int(ADDON.getSetting('server_mode') or '0')
     current_index = 0
     for i, mode in enumerate(index_to_mode):
         if mode == current_mode:

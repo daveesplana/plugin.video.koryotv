@@ -74,3 +74,67 @@ msgstr ""
 msgctxt "#30024"
 msgid "Enable the built-in EPG feed for Korean Central Television (KCTV)."
 msgstr ""
+
+msgctxt "#30030"
+msgid "Live Broadcasts"
+msgstr ""
+
+msgctxt "#30031"
+msgid "Report"
+msgstr ""
+
+msgctxt "#30032"
+msgid "Respected Comrade Kim Jong Un Revolutionary Activities"
+msgstr ""
+
+msgctxt "#30033"
+msgid "Society and Culture"
+msgstr ""
+
+msgctxt "#30034"
+msgid "Search"
+msgstr ""
+
+msgctxt "#30035"
+msgid "Support Koryo TV"
+msgstr ""
+
+msgctxt "#30040"
+msgid "Korean Central Television"
+msgstr ""
+
+msgctxt "#30050"
+msgid "Monday"
+msgstr ""
+
+msgctxt "#30051"
+msgid "Tuesday"
+msgstr ""
+
+msgctxt "#30052"
+msgid "Wednesday"
+msgstr ""
+
+msgctxt "#30053"
+msgid "Thursday"
+msgstr ""
+
+msgctxt "#30054"
+msgid "Friday"
+msgstr ""
+
+msgctxt "#30055"
+msgid "Saturday"
+msgstr ""
+
+msgctxt "#30056"
+msgid "Sunday"
+msgstr ""
+
+msgctxt "#30041"
+msgid "Korean Central Broadcasting Station"
+msgstr ""
+
+msgctxt "#30042"
+msgid "Voice of Korea"
+msgstr ""
