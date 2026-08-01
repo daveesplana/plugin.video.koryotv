@@ -315,14 +315,57 @@ def _build_live_channel_plot(channel_key):
         return ''
 
     entries = epg.get(channel_key, []) if isinstance(epg, dict) else []
-    lines = []
-    for entry in entries[:3]:
-        start = _format_epg_time(entry.get('start', ''))
-        title = entry.get('title', '')
-        if start and title:
-            lines.append('[{}]: {}'.format(start, title))
+    now = datetime.datetime.now().astimezone()
 
-    return '\n'.join(lines)
+    current_entry = None
+    upcoming_entry = None
+
+    for entry in entries:
+        start_raw = entry.get('start', '')
+        stop_raw = entry.get('stop', '')
+        title = entry.get('title', '')
+        if not title:
+            continue
+
+        try:
+            start_dt = datetime.datetime.fromisoformat(start_raw.replace('Z', '+00:00'))
+        except Exception:
+            start_dt = None
+
+        try:
+            stop_dt = datetime.datetime.fromisoformat(stop_raw.replace('Z', '+00:00'))
+        except Exception:
+            stop_dt = None
+
+        if start_dt is not None and start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=now.tzinfo)
+        if stop_dt is not None and stop_dt.tzinfo is None:
+            stop_dt = stop_dt.replace(tzinfo=now.tzinfo)
+
+        if start_dt is None:
+            continue
+
+        if stop_dt is not None and start_dt <= now <= stop_dt:
+            current_entry = entry
+            break
+
+        if stop_dt is None and start_dt <= now:
+            current_entry = entry
+            break
+
+        if start_dt > now and upcoming_entry is None:
+            upcoming_entry = entry
+
+    chosen_entry = current_entry or upcoming_entry
+    if not chosen_entry:
+        return ''
+
+    start = _format_epg_time(chosen_entry.get('start', ''))
+    title = chosen_entry.get('title', '')
+    if not start or not title:
+        return ''
+
+    return '[{}]: {}'.format(start, title)
 
 
 def _channel_icon(ch):

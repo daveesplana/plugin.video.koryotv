@@ -502,20 +502,33 @@ class LiveChannelIdTests(unittest.TestCase):
         finally:
             sys.argv = original_argv
 
-    def test_live_channel_plot_uses_up_to_three_epg_lines(self):
+    def test_live_channel_plot_shows_only_the_current_program_line(self):
+        import datetime
         import default as default_module
 
+        original_datetime = default_module.datetime.datetime
+
+        class _FixedDateTime(original_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.datetime(2026, 8, 1, 20, 30, tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+
+        default_module.datetime.datetime = _FixedDateTime
         default_module.api.get_default_iptv_epg = lambda wanted_channel_ids=None, timeout=20: {
             'kctv': [
-                {'start': '2026-08-01T19:00:00+09:00', 'title': 'News'},
-                {'start': '2026-08-01T20:00:00+09:00', 'title': 'Sports'},
-                {'start': '2026-08-01T21:00:00+09:00', 'title': 'Weather'},
-                {'start': '2026-08-01T22:00:00+09:00', 'title': 'Late Night'},
+                {'start': '2026-08-01T19:00:00+09:00', 'stop': '2026-08-01T20:00:00+09:00', 'title': 'News'},
+                {'start': '2026-08-01T20:00:00+09:00', 'stop': '2026-08-01T21:00:00+09:00', 'title': 'Sports'},
+                {'start': '2026-08-01T21:00:00+09:00', 'stop': '2026-08-01T22:00:00+09:00', 'title': 'Weather'},
+                {'start': '2026-08-01T22:00:00+09:00', 'stop': '2026-08-01T23:00:00+09:00', 'title': 'Late Night'},
             ]
         }
 
-        plot = default_module._build_live_channel_plot('kctv')
-        self.assertEqual(plot, '[19:00]: News\n[20:00]: Sports\n[21:00]: Weather')
+        try:
+            plot = default_module._build_live_channel_plot('kctv')
+        finally:
+            default_module.datetime.datetime = original_datetime
+
+        self.assertEqual(plot, '[20:00]: Sports')
 
     def test_play_live_skips_progress_popup_when_server_mode_is_manual(self):
         import default as default_module
