@@ -282,6 +282,46 @@ class LiveChannelIdTests(unittest.TestCase):
         url = api.build_default_epg_url()
         self.assertEqual(url, 'https://koryofront.org/api/epg?channel=KCTV')
 
+    def test_default_iptv_epg_is_cached_for_a_day(self):
+        original_urlopen = api.urlopen
+        original_cache = api._DEFAULT_EPG_CACHE.copy()
+        original_cache_key = getattr(api, '_DEFAULT_EPG_CACHE_KEY', None)
+        calls = {'count': 0}
+
+        xml = b'''<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="KCTV"><display-name lang="en">Korean Central Television</display-name></channel>
+  <programme start="20260801120000 +0900" stop="20260801123000 +0900" channel="KCTV">
+    <title>News</title>
+  </programme>
+</tv>'''
+
+        class _FakeResponse(object):
+            def read(self):
+                return xml
+
+        def fake_urlopen(req, timeout=20, context=None):
+            calls['count'] += 1
+            return _FakeResponse()
+
+        api.urlopen = fake_urlopen
+        api._DEFAULT_EPG_CACHE = {}
+        api._DEFAULT_EPG_CACHE_KEY = ''
+
+        try:
+            first = api.get_default_iptv_epg(wanted_channel_ids={'kctv'})
+            second = api.get_default_iptv_epg(wanted_channel_ids={'kctv'})
+        finally:
+            api.urlopen = original_urlopen
+            api._DEFAULT_EPG_CACHE = original_cache
+            api._DEFAULT_EPG_CACHE_KEY = original_cache_key
+
+        self.assertEqual(calls['count'], 1)
+        self.assertIn('kctv', first)
+        self.assertIn('kctv', second)
+        self.assertEqual(first['kctv'][0]['title'], 'News')
+        self.assertEqual(second['kctv'][0]['title'], 'News')
+
     def test_xmltv_epg_channels_are_normalized_for_iptv_channel_ids(self):
         raw = b'''<?xml version="1.0" encoding="UTF-8"?>
 <tv>

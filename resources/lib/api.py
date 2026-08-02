@@ -80,6 +80,9 @@ HEADERS = {
     'Referer':    'https://koryo.tv/',
 }
 
+_DEFAULT_EPG_CACHE = {}
+_DEFAULT_EPG_CACHE_KEY = ''
+
 def _random_hex_token():
     return binascii.hexlify(os.urandom(12)).decode('ascii')
 
@@ -862,16 +865,32 @@ def build_default_epg_url(date_value=None):
 
 def get_default_iptv_epg(wanted_channel_ids=None, timeout=20):
     url = build_default_epg_url()
+    today_key = time.strftime('%Y-%m-%d')
+    global _DEFAULT_EPG_CACHE, _DEFAULT_EPG_CACHE_KEY
+
+    if _DEFAULT_EPG_CACHE_KEY == today_key:
+        cached = _DEFAULT_EPG_CACHE.get(today_key, {})
+        if wanted_channel_ids is None:
+            return cached
+        return {
+            key: value for key, value in cached.items()
+            if key in wanted_channel_ids or key in [str(v).strip() for v in wanted_channel_ids]
+        }
+
     try:
         req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/xml, text/xml, */*'})
         response = urlopen(req, timeout=timeout, context=_ssl_context())
         raw = response.read()
-        return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
+        parsed = parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
     except TypeError:
         req = Request(url, headers={'User-Agent': UA, 'Accept': 'application/xml, text/xml, */*'})
         response = urlopen(req, timeout=timeout)
         raw = response.read()
-        return parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
+        parsed = parse_xmltv_epg(raw, wanted_channel_ids=wanted_channel_ids)
     except Exception as e:
         xbmc.log('[KoryoTV] Default EPG fetch/parse failed for {}: {}'.format(url, e), xbmc.LOGWARNING)
         return {}
+
+    _DEFAULT_EPG_CACHE_KEY = today_key
+    _DEFAULT_EPG_CACHE[today_key] = parsed
+    return parsed
